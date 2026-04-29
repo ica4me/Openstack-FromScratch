@@ -1,0 +1,8 @@
+# inventories/lab-5node/group_vars/computes.yml
+---
+node_role: compute
+
+compute_services:
+  - nova-compute
+  - neutron-openvswitch-agent
+  - libvirtd

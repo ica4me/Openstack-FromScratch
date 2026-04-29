@@ -1,0 +1,47 @@
+# inventories/lab-5node/group_vars/ceph.yml
+---
+ceph_external: true
+ceph_cluster_name: ceph
+
+# OpenStack controller/compute sebagai Ceph client memakai NIC 3
+ceph_public_network: 172.16.1.0/24
+openstack_ceph_client_network: 172.16.1.0/24
+
+# OpenStack client tidak memakai Ceph cluster/private network.
+# Isi hanya untuk dokumentasi jika perlu.
+ceph_cluster_network: ""
+
+ceph_conf_path: /etc/ceph/ceph.conf
+
+ceph_mon_hosts:
+  - 172.16.1.21
+
+ceph_pools:
+  glance: images
+  cinder: volumes
+  nova: vms
+  gnocchi: metrics
+  backup: backups
+
+ceph_users:
+  glance: client.glance
+  cinder: client.cinder
+  nova: client.nova
+  gnocchi: client.gnocchi
+
+rbd_secret_uuid: "00000000-0000-0000-0000-000000000001"
+
+glance_backend: rbd
+glance_rbd_store_pool: "{{ ceph_pools.glance }}"
+glance_image_format: raw
+
+cinder_backend: rbd
+cinder_rbd_pool: "{{ ceph_pools.cinder }}"
+cinder_rbd_user: cinder
+
+nova_rbd_pool: "{{ ceph_pools.nova }}"
+nova_rbd_user: nova
+
+gnocchi_backend: ceph
+gnocchi_rbd_pool: "{{ ceph_pools.gnocchi }}"
+gnocchi_rbd_user: gnocchi

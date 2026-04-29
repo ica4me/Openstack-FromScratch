@@ -1,0 +1,25 @@
+# inventories/lab-5node/group_vars/openstack.yml
+---
+endpoint_protocol: http
+endpoint_host: "{{ vip_internal }}"
+endpoint_base_url: "{{ endpoint_protocol }}://{{ endpoint_host }}"
+
+db_host: "{{ vip_internal }}"
+rabbitmq_host: "{{ vip_internal }}"
+
+memcached_servers: >-
+  {{ groups['controllers']
+     | map('extract', hostvars, 'management_ip')
+     | map('regex_replace', '^(.*)$', '\\1:11211')
+     | join(',') }}
+
+service_endpoints:
+  keystone: "{{ endpoint_base_url }}:5000/v3"
+  glance: "{{ endpoint_base_url }}:9292"
+  placement: "{{ endpoint_base_url }}:8778"
+  nova: "{{ endpoint_base_url }}:8774/v2.1"
+  neutron: "{{ endpoint_base_url }}:9696"
+  cinder: "{{ endpoint_base_url }}:8776/v3/%(project_id)s"
+  horizon: "{{ endpoint_base_url }}/horizon"
+  gnocchi: "{{ endpoint_base_url }}:8041"
+  aodh: "{{ endpoint_base_url }}:8042"

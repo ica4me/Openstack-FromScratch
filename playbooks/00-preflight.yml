@@ -1,0 +1,173 @@
+# playbooks/00-preflight.yml
+---
+- name: Phase 00 - Preflight validation for OpenStack HA cluster
+  hosts: openstack
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Show host identity
+      ansible.builtin.debug:
+        msg:
+          - "Inventory host: {{ inventory_hostname }}"
+          - "Expected hostname: {{ expected_hostname | default('undefined') }}"
+          - "Detected hostname: {{ ansible_hostname }}"
+          - "Role: {{ node_role | default('undefined') }}"
+          - "Management IP: {{ management_ip | default('undefined') }}"
+          - "Storage IP: {{ storage_ip | default('undefined') }}"
+          - "Management iface: {{ management_iface | default('undefined') }}"
+          - "Provider iface: {{ provider_iface | default('undefined') }}"
+          - "Storage iface: {{ storage_iface | default('undefined') }}"
+
+  tasks:
+    - name: Assert node runs Ubuntu 22.04
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "Ubuntu"
+          - ansible_distribution_version is version("22.04", "==")
+        fail_msg: "Node harus Ubuntu 22.04 LTS."
+        success_msg: "OS valid: Ubuntu 22.04 LTS."
+
+    - name: Assert expected hostname is configured
+      ansible.builtin.assert:
+        that:
+          - expected_hostname is defined
+          - ansible_hostname == expected_hostname
+        fail_msg: "Hostname OS tidak sesuai. Jalankan hostnamectl set-hostname sesuai node."
+        success_msg: "Hostname OS sesuai inventory."
+
+    - name: Assert controller count is at least 3 and odd
+      ansible.builtin.assert:
+        that:
+          - groups['controllers'] | length >= 3
+          - ((groups['controllers'] | length) % 2) == 1
+        fail_msg: "Jumlah controller harus minimal 3 dan ganjil untuk quorum HA."
+        success_msg: "Jumlah controller valid."
+      run_once: true
+
+    - name: Assert compute count is at least 1
+      ansible.builtin.assert:
+        that:
+          - groups['computes'] | length >= 1
+        fail_msg: "Minimal harus ada 1 compute node."
+        success_msg: "Jumlah compute valid."
+      run_once: true
+
+    - name: Assert required global variables exist
+      ansible.builtin.assert:
+        that:
+          - vip_internal is defined
+          - vip_interface is defined
+          - management_cidr is defined
+          - provider_cidr is defined
+          - storage_cidr is defined
+          - openstack_cloud_archive is defined
+          - bootstrap_controller is defined
+        fail_msg: "Ada variabel global wajib yang belum didefinisikan."
+        success_msg: "Variabel global wajib lengkap."
+      run_once: true
+
+    - name: Assert required host variables exist
+      ansible.builtin.assert:
+        that:
+          - management_ip is defined
+          - storage_ip is defined
+          - management_iface is defined
+          - provider_iface is defined
+          - storage_iface is defined
+        fail_msg: "Variabel host wajib belum lengkap."
+        success_msg: "Variabel host wajib lengkap."
+
+    - name: Assert network interfaces exist
+      ansible.builtin.assert:
+        that:
+          - management_iface in ansible_facts.interfaces
+          - provider_iface in ansible_facts.interfaces
+          - storage_iface in ansible_facts.interfaces
+        fail_msg: "Salah satu NIC tidak ditemukan. Cek nama interface di inventory."
+        success_msg: "Semua NIC ditemukan."
+
+    - name: Assert management IP belongs to 172.16.2.x allocation
+      ansible.builtin.assert:
+        that:
+          - management_ip is match('^172\\.16\\.2\\.')
+        fail_msg: "management_ip harus berada di network 172.16.2.0/24."
+        success_msg: "management_ip sesuai topologi."
+
+    - name: Assert storage IP belongs to 172.16.1.x allocation
+      ansible.builtin.assert:
+        that:
+          - storage_ip is match('^172\\.16\\.1\\.')
+        fail_msg: "storage_ip harus berada di network 172.16.1.0/24."
+        success_msg: "storage_ip sesuai topologi."
+
+    - name: Assert VIP belongs to management allocation
+      ansible.builtin.assert:
+        that:
+          - vip_internal is match('^172\\.16\\.2\\.')
+          - vip_internal == '172.16.2.200'
+        fail_msg: "VIP harus 172.16.2.200 di management network."
+        success_msg: "VIP sesuai topologi."
+      run_once: true
+
+    - name: Validate local hostname resolution from /etc/hosts or DNS
+      ansible.builtin.command: "getent hosts {{ item.name.split()[0] }}"
+      loop: "{{ hosts_entries }}"
+      changed_when: false
+
+    - name: Check management SSH connectivity between all OpenStack nodes
+      ansible.builtin.wait_for:
+        host: "{{ hostvars[item].management_ip }}"
+        port: 22
+        timeout: 5
+      loop: "{{ groups['openstack'] }}"
+      changed_when: false
+
+    - name: Check Ceph MON v2 port from each OpenStack node
+      ansible.builtin.wait_for:
+        host: "{{ item }}"
+        port: 3300
+        timeout: 5
+      loop: "{{ ceph_mon_hosts }}"
+      changed_when: false
+
+    - name: Check Ceph MON legacy v1 port from each OpenStack node
+      ansible.builtin.wait_for:
+        host: "{{ item }}"
+        port: 6789
+        timeout: 5
+      loop: "{{ ceph_mon_hosts }}"
+      changed_when: false
+      failed_when: false
+
+    - name: Check if VIP is not already used before keepalived deployment
+      ansible.builtin.command: "ping -c 1 -W 1 {{ vip_internal }}"
+      register: vip_ping
+      failed_when: false
+      changed_when: false
+      run_once: true
+
+    - name: Assert VIP is currently unused
+      ansible.builtin.assert:
+        that:
+          - vip_ping.rc != 0
+        fail_msg: "VIP {{ vip_internal }} sudah aktif/dipakai. Cek konflik IP sebelum lanjut."
+        success_msg: "VIP {{ vip_internal }} belum dipakai, aman untuk keepalived."
+      run_once: true
+
+    - name: Print final cluster summary
+      ansible.builtin.debug:
+        msg:
+          - "Deployment: {{ deployment_name }}"
+          - "OpenStack release: {{ openstack_release }}"
+          - "Ubuntu release: {{ ubuntu_release }}"
+          - "Cloud archive: {{ openstack_cloud_archive }}"
+          - "Management network: {{ management_cidr }}"
+          - "Provider network: {{ provider_cidr }}"
+          - "Storage/Ceph network: {{ storage_cidr }}"
+          - "VIP: {{ vip_internal }}"
+          - "Controllers: {{ groups['controllers'] | join(', ') }}"
+          - "Computes: {{ groups['computes'] | join(', ') }}"
+          - "Bootstrap controller: {{ bootstrap_controller }}"
+          - "Ceph MON hosts: {{ ceph_mon_hosts | join(', ') }}"
+      run_once: true

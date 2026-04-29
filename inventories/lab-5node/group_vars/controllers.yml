@@ -1,0 +1,11 @@
+# inventories/lab-5node/group_vars/controllers.yml
+---
+node_role: controller
+
+controller_services:
+  - keepalived
+  - haproxy
+  - mariadb
+  - rabbitmq-server
+  - memcached
+  - apache2

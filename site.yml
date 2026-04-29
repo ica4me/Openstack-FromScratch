@@ -1,0 +1,20 @@
+# site.yml
+---
+- import_playbook: playbooks/00-preflight.yml
+- import_playbook: playbooks/01-base.yml
+- import_playbook: playbooks/02-network.yml
+- import_playbook: playbooks/03-ceph-client.yml
+- import_playbook: playbooks/04-ha-vip-lb.yml
+- import_playbook: playbooks/05-database.yml
+- import_playbook: playbooks/06-message-cache.yml
+- import_playbook: playbooks/07-keystone.yml
+- import_playbook: playbooks/08-image-placement.yml
+- import_playbook: playbooks/09-nova.yml
+- import_playbook: playbooks/10-neutron.yml
+- import_playbook: playbooks/11-cinder.yml
+- import_playbook: playbooks/12-horizon.yml
+- import_playbook: playbooks/13-telemetry.yml
+  when: enable_telemetry | bool
+- import_playbook: playbooks/14-instance-ha.yml
+  when: enable_masakari | bool
+- import_playbook: playbooks/99-validate.yml

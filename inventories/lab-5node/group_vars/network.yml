@@ -1,0 +1,46 @@
+# inventories/lab-5node/group_vars/network.yml
+---
+# NIC 1 - Storage / Ceph External Client
+storage_cidr: 172.16.1.0/24
+
+# NIC 2 - Management + API + VXLAN
+management_cidr: 172.16.2.0/24
+management_gateway: 172.16.2.1
+
+# NIC 3 - Provider / External / Floating IP
+provider_cidr: 172.16.3.0/24
+provider_gateway: 172.16.3.1
+
+dns_servers:
+  - 8.8.8.8
+  - 1.1.1.1
+
+management_iface_default: ens19
+provider_iface_default: ens20
+storage_iface_default: eth0
+
+# Neutron ML2 + Open vSwitch baseline
+neutron_plugin: ml2
+neutron_mechanism_driver: openvswitch
+
+neutron_type_drivers:
+  - flat
+  - vlan
+  - vxlan
+
+neutron_tenant_network_types:
+  - vxlan
+
+# VXLAN endpoint memakai NIC management
+neutron_tunnel_interface: "{{ management_iface | default(management_iface_default) }}"
+neutron_local_ip: "{{ management_ip }}"
+
+# Provider bridge
+neutron_external_bridge: br-ex
+neutron_provider_physnet: provider
+
+neutron_bridge_mappings:
+  - "{{ neutron_provider_physnet }}:{{ neutron_external_bridge }}"
+
+neutron_flat_networks:
+  - provider

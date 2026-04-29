@@ -1,0 +1,42 @@
+# inventories/lab-5node/group_vars/all.yml
+---
+deployment_name: lab-5node
+
+openstack_release: caracal
+ubuntu_release: jammy
+openstack_cloud_archive: cloud-archive:caracal
+
+timezone: Asia/Jakarta
+
+ansible_user: root
+ansible_become: true
+ansible_become_method: sudo
+
+# HA API VIP berada di Management Network
+vip_internal: 172.16.2.200
+vip_interface: ens19
+
+internal_fqdn: openstack-api.internal
+public_fqdn: openstack-api.local
+
+openstack_region: RegionOne
+openstack_domain: Default
+openstack_admin_project: admin
+openstack_service_project: service
+
+enable_tls: false
+enable_horizon: true
+enable_telemetry: true
+enable_masakari: true
+
+controller_count: "{{ groups['controllers'] | length }}"
+compute_count: "{{ groups['computes'] | length }}"
+bootstrap_controller: "{{ groups['controllers'][0] }}"
+
+hosts_entries:
+  - { ip: "172.16.2.211", name: "controller-01" }
+  - { ip: "172.16.2.212", name: "controller-02" }
+  - { ip: "172.16.2.213", name: "controller-03" }
+  - { ip: "172.16.2.221", name: "compute-01" }
+  - { ip: "172.16.2.222", name: "compute-02" }
+  - { ip: "172.16.2.200", name: "openstack-api.internal openstack-api" }
