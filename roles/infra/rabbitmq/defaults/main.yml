@@ -1,0 +1,10 @@
+---
+rabbitmq_packages:
+  - rabbitmq-server
+
+rabbitmq_service: rabbitmq-server
+rabbitmq_erlang_cookie_path: /var/lib/rabbitmq/.erlang.cookie
+
+rabbitmq_management_plugin_enabled: true
+rabbitmq_cluster_partition_handling: pause_minority
+rabbitmq_loopback_users: none

@@ -1,0 +1,7 @@
+---
+memcached_packages:
+  - memcached
+  - python3-memcache
+
+memcached_service: memcached
+memcached_config_path: /etc/memcached.conf

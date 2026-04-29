@@ -1,0 +1,119 @@
+---
+- name: Assert RabbitMQ variables exist
+  ansible.builtin.assert:
+    that:
+      - rabbitmq_erlang_cookie is defined
+      - rabbitmq_bootstrap_node is defined
+      - rabbitmq_openstack_user is defined
+      - rabbitmq_openstack_password is defined
+      - management_ip is defined
+    fail_msg: "Variabel RabbitMQ belum lengkap."
+
+- name: Install RabbitMQ packages
+  ansible.builtin.apt:
+    name: "{{ rabbitmq_packages }}"
+    state: present
+    update_cache: true
+
+- name: Stop RabbitMQ before setting Erlang cookie
+  ansible.builtin.service:
+    name: "{{ rabbitmq_service }}"
+    state: stopped
+
+- name: Write shared Erlang cookie
+  ansible.builtin.copy:
+    dest: "{{ rabbitmq_erlang_cookie_path }}"
+    content: "{{ rabbitmq_erlang_cookie }}"
+    owner: rabbitmq
+    group: rabbitmq
+    mode: "0600"
+  no_log: true
+
+- name: Deploy RabbitMQ config
+  ansible.builtin.template:
+    src: rabbitmq.conf.j2
+    dest: /etc/rabbitmq/rabbitmq.conf
+    owner: root
+    group: rabbitmq
+    mode: "0644"
+    backup: true
+
+- name: Start RabbitMQ bootstrap node
+  ansible.builtin.service:
+    name: "{{ rabbitmq_service }}"
+    state: started
+    enabled: true
+  when: inventory_hostname == rabbitmq_bootstrap_node
+
+- name: Start RabbitMQ joining node
+  ansible.builtin.service:
+    name: "{{ rabbitmq_service }}"
+    state: started
+    enabled: true
+  when: inventory_hostname != rabbitmq_bootstrap_node
+
+- name: Wait for RabbitMQ AMQP port
+  ansible.builtin.wait_for:
+    host: "{{ management_ip }}"
+    port: 5672
+    timeout: 60
+
+- name: Enable RabbitMQ management plugin
+  ansible.builtin.command: rabbitmq-plugins enable rabbitmq_management
+  register: rabbitmq_plugin_enable
+  changed_when: "'already enabled' not in rabbitmq_plugin_enable.stdout"
+  when: rabbitmq_management_plugin_enabled | bool
+
+- name: Check RabbitMQ cluster membership
+  ansible.builtin.command: rabbitmqctl cluster_status
+  register: rabbitmq_cluster_status_before
+  changed_when: false
+  failed_when: false
+
+- name: Join RabbitMQ cluster from non-bootstrap nodes
+  ansible.builtin.shell: |
+    set -e
+    rabbitmqctl stop_app
+    rabbitmqctl reset
+    rabbitmqctl join_cluster rabbit@{{ hostvars[rabbitmq_bootstrap_node].expected_hostname }}
+    rabbitmqctl start_app
+  when:
+    - inventory_hostname != rabbitmq_bootstrap_node
+    - hostvars[rabbitmq_bootstrap_node].expected_hostname not in rabbitmq_cluster_status_before.stdout
+  register: rabbitmq_join_cluster
+
+- name: Ensure RabbitMQ OpenStack user exists on bootstrap node
+  ansible.builtin.command: >
+    rabbitmqctl add_user {{ rabbitmq_openstack_user }} {{ rabbitmq_openstack_password }}
+  register: rabbitmq_add_user
+  changed_when: rabbitmq_add_user.rc == 0
+  failed_when:
+    - rabbitmq_add_user.rc != 0
+    - "'user_already_exists' not in rabbitmq_add_user.stderr"
+  no_log: true
+  when: inventory_hostname == rabbitmq_bootstrap_node
+
+- name: Set RabbitMQ OpenStack user permissions on bootstrap node
+  ansible.builtin.command: >
+    rabbitmqctl set_permissions -p {{ rabbitmq_openstack_vhost }}
+    {{ rabbitmq_openstack_user }} ".*" ".*" ".*"
+  no_log: true
+  when: inventory_hostname == rabbitmq_bootstrap_node
+
+- name: Set RabbitMQ OpenStack user tags
+  ansible.builtin.command: >
+    rabbitmqctl set_user_tags {{ rabbitmq_openstack_user }} administrator
+  no_log: true
+  when: inventory_hostname == rabbitmq_bootstrap_node
+
+- name: Show RabbitMQ cluster status
+  ansible.builtin.command: rabbitmqctl cluster_status
+  register: rabbitmq_cluster_status_after
+  changed_when: false
+
+- name: Print RabbitMQ local summary
+  ansible.builtin.debug:
+    msg:
+      - "RabbitMQ configured on {{ inventory_hostname }}"
+      - "Bootstrap node: {{ rabbitmq_bootstrap_node }}"
+      - "Expected hostname: {{ expected_hostname }}"

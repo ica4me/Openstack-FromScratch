@@ -1,0 +1,7 @@
+# Managed by Ansible - RabbitMQ for OpenStack
+
+listeners.tcp.default = 5672
+management.tcp.port = 15672
+
+cluster_partition_handling = {{ rabbitmq_cluster_partition_handling }}
+loopback_users.guest = {{ rabbitmq_loopback_users }}

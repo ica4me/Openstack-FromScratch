@@ -1,0 +1,10 @@
+# Managed by Ansible - Memcached for OpenStack
+
+-d
+logfile /var/log/memcached.log
+-m {{ memcached_memory_mb }}
+-p {{ memcached_port }}
+-u memcache
+-l {{ memcached_listen_ip }}
+-c {{ memcached_max_connections }}
+-P /var/run/memcached/memcached.pid

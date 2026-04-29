@@ -99,3 +99,17 @@ mariadb_openstack_databases:
   - gnocchi
   - aodh
   - masakari
+
+# RabbitMQ Cluster
+rabbitmq_cluster_name: openstack_rabbitmq
+rabbitmq_bootstrap_node: "{{ groups['controllers'][0] }}"
+rabbitmq_openstack_user: openstack
+rabbitmq_openstack_vhost: /
+rabbitmq_openstack_password: "{{ vault_rabbitmq_openstack_password }}"
+rabbitmq_erlang_cookie: "{{ vault_rabbitmq_erlang_cookie }}"
+
+# Memcached
+memcached_port: 11211
+memcached_listen_ip: "{{ management_ip }}"
+memcached_memory_mb: 256
+memcached_max_connections: 4096

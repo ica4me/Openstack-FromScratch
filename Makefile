@@ -51,3 +51,6 @@ vault-edit:
 
 vault-view:
 	ansible-vault view inventories/lab-5node/group_vars/vault.yml
+
+msgcache:
+	ansible-playbook -i inventories/lab-5node/hosts.yml playbooks/06-message-cache.yml

@@ -1,0 +1,42 @@
+---
+- name: Assert Memcached variables exist
+  ansible.builtin.assert:
+    that:
+      - memcached_listen_ip is defined
+      - memcached_port is defined
+      - memcached_memory_mb is defined
+      - memcached_max_connections is defined
+    fail_msg: "Variabel Memcached belum lengkap."
+
+- name: Install Memcached packages
+  ansible.builtin.apt:
+    name: "{{ memcached_packages }}"
+    state: present
+    update_cache: true
+
+- name: Deploy Memcached config
+  ansible.builtin.template:
+    src: memcached.conf.j2
+    dest: "{{ memcached_config_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+
+- name: Enable and restart Memcached
+  ansible.builtin.service:
+    name: "{{ memcached_service }}"
+    state: restarted
+    enabled: true
+
+- name: Wait for Memcached port
+  ansible.builtin.wait_for:
+    host: "{{ memcached_listen_ip }}"
+    port: "{{ memcached_port }}"
+    timeout: 30
+
+- name: Print Memcached local summary
+  ansible.builtin.debug:
+    msg:
+      - "Memcached configured on {{ inventory_hostname }}"
+      - "Listen: {{ memcached_listen_ip }}:{{ memcached_port }}"

@@ -1,0 +1,67 @@
+---
+- name: Phase 06 - RabbitMQ Cluster and Memcached
+  hosts: controllers
+  become: true
+  gather_facts: true
+  serial: 1
+
+  roles:
+    - role: infra/rabbitmq
+    - role: infra/memcached
+
+  post_tasks:
+    - name: Check RabbitMQ service
+      ansible.builtin.command: systemctl is-active rabbitmq-server
+      changed_when: false
+
+    - name: Check Memcached service
+      ansible.builtin.command: systemctl is-active memcached
+      changed_when: false
+
+- name: Phase 06 - Validate RabbitMQ and Memcached
+  hosts: controllers
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Validate RabbitMQ cluster status from bootstrap node
+      ansible.builtin.command: rabbitmqctl cluster_status
+      register: rabbitmq_cluster_status
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ groups['controllers'][0] }}"
+
+    - name: Print RabbitMQ cluster status
+      ansible.builtin.debug:
+        var: rabbitmq_cluster_status.stdout_lines
+      run_once: true
+
+    - name: Validate RabbitMQ OpenStack user exists
+      ansible.builtin.command: rabbitmqctl list_users
+      register: rabbitmq_users
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ groups['controllers'][0] }}"
+
+    - name: Assert RabbitMQ OpenStack user exists
+      ansible.builtin.assert:
+        that:
+          - rabbitmq_openstack_user in rabbitmq_users.stdout
+        success_msg: "RabbitMQ OpenStack user exists."
+        fail_msg: "RabbitMQ OpenStack user belum ada."
+      run_once: true
+
+    - name: Validate Memcached is listening on management IP
+      ansible.builtin.wait_for:
+        host: "{{ management_ip }}"
+        port: "{{ memcached_port }}"
+        timeout: 10
+
+    - name: Print message/cache phase summary
+      ansible.builtin.debug:
+        msg:
+          - "RabbitMQ + Memcached phase completed."
+          - "RabbitMQ bootstrap: {{ groups['controllers'][0] }}"
+          - "Controllers: {{ groups['controllers'] | join(', ') }}"
+          - "Memcached port: {{ memcached_port }}"
+      run_once: true
