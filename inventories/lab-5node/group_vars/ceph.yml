@@ -1,27 +1,32 @@
-# inventories/lab-5node/group_vars/ceph.yml
 ---
 ceph_external: true
 ceph_cluster_name: ceph
 
-# OpenStack controller/compute sebagai Ceph client memakai NIC 3
+ceph_fsid: 38139bfa-1de0-11f1-8f1f-8f0f63c1e398
+
 ceph_public_network: 172.16.1.0/24
 openstack_ceph_client_network: 172.16.1.0/24
-
-# OpenStack client tidak memakai Ceph cluster/private network.
-# Isi hanya untuk dokumentasi jika perlu.
-ceph_cluster_network: ""
-
-ceph_conf_path: /etc/ceph/ceph.conf
+ceph_cluster_network: 172.16.2.0/24
 
 ceph_mon_hosts:
   - 172.16.1.21
+
+ceph_mon_ports:
+  - 3300
+  - 6789
+
+ceph_conf_path: /etc/ceph/ceph.conf
+
+# Project root dihitung dari lokasi inventory:
+# /root/openstack-caracal-ansible/inventories/lab-5node -> ../..
+ceph_files_dir: "{{ inventory_dir }}/../../files/ceph"
 
 ceph_pools:
   glance: images
   cinder: volumes
   nova: vms
+  cinder_backup: backups
   gnocchi: metrics
-  backup: backups
 
 ceph_users:
   glance: client.glance
@@ -29,14 +34,45 @@ ceph_users:
   nova: client.nova
   gnocchi: client.gnocchi
 
+ceph_keyrings:
+  - service: glance
+    client_name: client.glance
+    client_id: glance
+    src: "{{ ceph_files_dir }}/ceph.client.glance.keyring"
+    dest: /etc/ceph/ceph.client.glance.keyring
+    validate_pool: images
+
+  - service: cinder
+    client_name: client.cinder
+    client_id: cinder
+    src: "{{ ceph_files_dir }}/ceph.client.cinder.keyring"
+    dest: /etc/ceph/ceph.client.cinder.keyring
+    validate_pool: volumes
+
+  - service: nova
+    client_name: client.nova
+    client_id: nova
+    src: "{{ ceph_files_dir }}/ceph.client.nova.keyring"
+    dest: /etc/ceph/ceph.client.nova.keyring
+    validate_pool: vms
+
+  - service: gnocchi
+    client_name: client.gnocchi
+    client_id: gnocchi
+    src: "{{ ceph_files_dir }}/ceph.client.gnocchi.keyring"
+    dest: /etc/ceph/ceph.client.gnocchi.keyring
+    validate_pool: metrics
+
 rbd_secret_uuid: "00000000-0000-0000-0000-000000000001"
 
 glance_backend: rbd
 glance_rbd_store_pool: "{{ ceph_pools.glance }}"
 glance_image_format: raw
+glance_rbd_user: glance
 
 cinder_backend: rbd
 cinder_rbd_pool: "{{ ceph_pools.cinder }}"
+cinder_backup_rbd_pool: "{{ ceph_pools.cinder_backup }}"
 cinder_rbd_user: cinder
 
 nova_rbd_pool: "{{ ceph_pools.nova }}"

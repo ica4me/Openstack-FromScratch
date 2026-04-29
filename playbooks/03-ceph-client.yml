@@ -1,0 +1,53 @@
+# playbooks/03-ceph-client.yml
+---
+- name: Phase 03 - Configure external Ceph client integration
+  hosts: ceph_clients
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: ceph/ceph_client
+
+  post_tasks:
+    - name: Validate ceph.conf exists
+      ansible.builtin.stat:
+        path: "{{ ceph_conf_path }}"
+      register: ceph_conf_stat
+
+    - name: Assert ceph.conf exists
+      ansible.builtin.assert:
+        that:
+          - ceph_conf_stat.stat.exists
+          - ceph_conf_stat.stat.size | int > 0
+        fail_msg: "{{ ceph_conf_path }} tidak ditemukan atau kosong."
+
+    - name: Validate Ceph cluster status using client.cinder
+      ansible.builtin.command: >
+        ceph -s
+        --cluster {{ ceph_cluster_name }}
+        --name client.cinder
+        --keyring /etc/ceph/ceph.client.cinder.keyring
+      register: ceph_status_cinder
+      changed_when: false
+
+    - name: Show Ceph status via client.cinder
+      ansible.builtin.debug:
+        var: ceph_status_cinder.stdout_lines
+
+    - name: Assert Ceph cluster is reachable
+      ansible.builtin.assert:
+        that:
+          - ceph_status_cinder.rc == 0
+          - "'cluster:' in ceph_status_cinder.stdout"
+        fail_msg: "Ceph client validation gagal. Cek ceph.conf, keyring client.cinder, firewall, MON 172.16.1.21, dan caps Ceph."
+
+    - name: Print Ceph client phase summary
+      ansible.builtin.debug:
+        msg:
+          - "Ceph client phase completed on {{ inventory_hostname }}"
+          - "Ceph cluster name: {{ ceph_cluster_name }}"
+          - "Ceph FSID: {{ ceph_fsid }}"
+          - "Ceph MON hosts: {{ ceph_mon_hosts | join(', ') }}"
+          - "Ceph public network: {{ ceph_public_network }}"
+          - "OpenStack Ceph client network: {{ openstack_ceph_client_network }}"
+          - "Pools: images={{ ceph_pools.glance }}, volumes={{ ceph_pools.cinder }}, vms={{ ceph_pools.nova }}, backups={{ ceph_pools.cinder_backup }}, metrics={{ ceph_pools.gnocchi }}"

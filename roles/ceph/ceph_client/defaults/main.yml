@@ -1,0 +1,28 @@
+# roles/ceph/ceph_client/defaults/main.yml
+---
+ceph_client_packages:
+  - ceph-common
+
+ceph_dir: /etc/ceph
+
+# Port Ceph MON:
+# 3300 = messenger v2
+# 6789 = legacy messenger v1
+ceph_validate_mon_ports:
+  - 3300
+  - 6789
+
+ceph_conf_owner: root
+ceph_conf_group: root
+ceph_conf_mode: "0644"
+
+ceph_keyring_owner: root
+ceph_keyring_group: root
+ceph_keyring_mode: "0600"
+
+# Jika true, role akan gagal bila port 6789 tidak terbuka.
+# Default false karena cluster modern bisa saja hanya memakai v2/3300.
+ceph_require_legacy_mon_port: false
+
+# Validasi RBD pool dengan rbd ls.
+ceph_validate_rbd_pools: true

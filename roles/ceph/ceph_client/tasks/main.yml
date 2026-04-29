@@ -1,0 +1,149 @@
+---
+- name: Assert Ceph integration variables exist
+  ansible.builtin.assert:
+    that:
+      - ceph_external | bool
+      - ceph_cluster_name is defined
+      - ceph_fsid is defined
+      - ceph_conf_path is defined
+      - ceph_mon_hosts is defined
+      - ceph_mon_hosts | length > 0
+      - ceph_public_network is defined
+      - openstack_ceph_client_network is defined
+      - ceph_keyrings is defined
+      - ceph_keyrings | length > 0
+    fail_msg: "Variabel Ceph belum lengkap. Cek inventories/lab-5node/group_vars/ceph.yml."
+
+- name: Assert Ceph client network matches storage network
+  ansible.builtin.assert:
+    that:
+      - openstack_ceph_client_network == storage_cidr
+    fail_msg: "openstack_ceph_client_network harus sama dengan storage_cidr."
+
+- name: Validate Ceph MON v2 port 3300 is reachable
+  ansible.builtin.wait_for:
+    host: "{{ item }}"
+    port: 3300
+    timeout: 5
+  loop: "{{ ceph_mon_hosts }}"
+  changed_when: false
+
+- name: Validate Ceph MON legacy port 6789
+  ansible.builtin.wait_for:
+    host: "{{ item }}"
+    port: 6789
+    timeout: 5
+  loop: "{{ ceph_mon_hosts }}"
+  changed_when: false
+  failed_when: ceph_require_legacy_mon_port | bool
+
+- name: Validate local keyring files exist on deployer
+  ansible.builtin.stat:
+    path: "{{ item.src }}"
+  loop: "{{ ceph_keyrings }}"
+  loop_control:
+    label: "{{ item.service }} -> {{ item.src }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  register: local_ceph_keyring_stats
+
+- name: Assert local keyring files exist on deployer
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.size | int > 0
+    fail_msg: "File keyring lokal tidak ditemukan/kosong di deployer: {{ item.item.src }}"
+  loop: "{{ local_ceph_keyring_stats.results }}"
+  loop_control:
+    label: "{{ item.item.src }}"
+  run_once: true
+
+- name: Install Ceph client packages
+  ansible.builtin.apt:
+    name: "{{ ceph_client_packages }}"
+    state: present
+    update_cache: true
+
+- name: Ensure /etc/ceph directory exists
+  ansible.builtin.file:
+    path: "{{ ceph_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy minimal ceph.conf for external cluster
+  ansible.builtin.template:
+    src: ceph.conf.j2
+    dest: "{{ ceph_conf_path }}"
+    owner: "{{ ceph_conf_owner }}"
+    group: "{{ ceph_conf_group }}"
+    mode: "{{ ceph_conf_mode }}"
+    backup: true
+
+- name: Copy Ceph service keyrings
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ ceph_keyring_owner }}"
+    group: "{{ ceph_keyring_group }}"
+    mode: "{{ ceph_keyring_mode }}"
+    backup: true
+  loop: "{{ ceph_keyrings }}"
+  loop_control:
+    label: "{{ item.service }} -> {{ item.dest }}"
+
+- name: Validate copied keyring files exist
+  ansible.builtin.stat:
+    path: "{{ item.dest }}"
+  loop: "{{ ceph_keyrings }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  register: ceph_keyring_stats
+
+- name: Assert copied keyring files exist and are not empty
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.size | int > 0
+    fail_msg: "Keyring {{ item.item.dest }} tidak ada atau kosong."
+  loop: "{{ ceph_keyring_stats.results }}"
+  loop_control:
+    label: "{{ item.item.dest }}"
+
+- name: Validate ceph.conf contains expected FSID
+  ansible.builtin.command: "grep -F '{{ ceph_fsid }}' {{ ceph_conf_path }}"
+  changed_when: false
+
+- name: Validate Ceph status with client.cinder keyring
+  ansible.builtin.command: >
+    ceph -s
+    --cluster {{ ceph_cluster_name }}
+    --name client.cinder
+    --keyring /etc/ceph/ceph.client.cinder.keyring
+  register: ceph_status_cinder
+  changed_when: false
+
+- name: Show Ceph status
+  ansible.builtin.debug:
+    var: ceph_status_cinder.stdout_lines
+
+- name: Validate RBD pools with their service users
+  ansible.builtin.command: >
+    rbd -p {{ item.validate_pool }} ls
+    --id {{ item.client_id }}
+  loop: "{{ ceph_keyrings }}"
+  loop_control:
+    label: "{{ item.client_id }} -> {{ item.validate_pool }}"
+  register: rbd_pool_validation
+  changed_when: false
+  when: ceph_validate_rbd_pools | bool
+
+- name: Print RBD pool validation summary
+  ansible.builtin.debug:
+    msg: "{{ item.item.client_id }} can access pool {{ item.item.validate_pool }}"
+  loop: "{{ rbd_pool_validation.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.client_id }} -> {{ item.item.validate_pool }}"
+  when: ceph_validate_rbd_pools | bool

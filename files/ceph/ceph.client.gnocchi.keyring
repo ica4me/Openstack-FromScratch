@@ -1,0 +1,4 @@
+[client.gnocchi]
+	key = AQD6tvFpc8w9OhAAZ6OwnX2FqSMwbjn7AJgMNQ==
+	caps mon = "profile rbd"
+	caps osd = "profile rbd pool=metrics"
