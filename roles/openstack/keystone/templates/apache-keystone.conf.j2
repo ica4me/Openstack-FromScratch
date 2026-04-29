@@ -1,0 +1,35 @@
+# Managed by Ansible - Keystone WSGI backend
+# Apache hanya listen di management IP. HAProxy listen di VIP.
+
+WSGIRestrictEmbedded On
+
+<VirtualHost {{ management_ip }}:5000>
+    ServerName {{ internal_fqdn }}
+
+    WSGIDaemonProcess keystone-public \
+        processes=4 \
+        threads=1 \
+        user=keystone \
+        group=keystone \
+        display-name=%{GROUP}
+
+    WSGIProcessGroup keystone-public
+    WSGIApplicationGroup %{GLOBAL}
+
+    WSGIImportScript /usr/bin/keystone-wsgi-public \
+        process-group=keystone-public \
+        application-group=%{GLOBAL}
+
+    WSGIScriptAlias / /usr/bin/keystone-wsgi-public \
+        process-group=keystone-public \
+        application-group=%{GLOBAL}
+
+    WSGIPassAuthorization On
+
+    ErrorLog /var/log/apache2/keystone_error.log
+    CustomLog /var/log/apache2/keystone_access.log combined
+
+    <Directory /usr/bin>
+        Require all granted
+    </Directory>
+</VirtualHost>

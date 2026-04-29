@@ -1,0 +1,49 @@
+---
+- name: Phase 07 - Keystone Identity Service
+  hosts: controllers
+  become: true
+  gather_facts: true
+  serial: 1
+
+  roles:
+    - role: openstack/keystone
+
+  post_tasks:
+    - name: Check Apache2 service
+      ansible.builtin.command: systemctl is-active apache2
+      changed_when: false
+
+    - name: Check Keystone API locally
+      ansible.builtin.uri:
+        url: "http://{{ management_ip }}:5000/v3"
+        method: GET
+        status_code:
+          - 200
+          - 300
+          - 401
+
+- name: Phase 07 - Validate Keystone VIP endpoint
+  hosts: controllers
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Validate Keystone endpoint through VIP
+      ansible.builtin.uri:
+        url: "http://{{ internal_fqdn }}:5000/v3"
+        method: GET
+        status_code:
+          - 200
+          - 300
+          - 401
+      run_once: true
+      delegate_to: "{{ groups['controllers'][0] }}"
+
+    - name: Print Keystone phase summary
+      ansible.builtin.debug:
+        msg:
+          - "Keystone phase completed."
+          - "Endpoint: http://{{ internal_fqdn }}:5000/v3"
+          - "Region: {{ keystone_region }}"
+          - "Bootstrap controller: {{ groups['controllers'][0] }}"
+      run_once: true

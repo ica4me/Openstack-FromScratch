@@ -1,0 +1,14 @@
+---
+keystone_packages:
+  - keystone
+  - apache2
+  - libapache2-mod-wsgi-py3
+  - python3-openstackclient
+  - python3-pymysql
+
+keystone_service_name: apache2
+keystone_conf_path: /etc/keystone/keystone.conf
+keystone_db_sync_marker: /var/lib/keystone/.db_synced
+keystone_bootstrap_marker: /var/lib/keystone/.bootstrapped
+keystone_fernet_marker: /var/lib/keystone/.fernet_initialized
+keystone_credential_marker: /var/lib/keystone/.credential_initialized

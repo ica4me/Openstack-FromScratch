@@ -1,0 +1,408 @@
+---
+- name: Assert Keystone variables exist
+  ansible.builtin.assert:
+    that:
+      - keystone_db_name is defined
+      - keystone_db_user is defined
+      - keystone_db_password is defined
+      - keystone_admin_user is defined
+      - keystone_admin_password is defined
+      - keystone_admin_project is defined
+      - keystone_database_connection is defined
+      - keystone_memcached_servers is defined
+      - keystone_public_endpoint is defined
+      - keystone_internal_endpoint is defined
+      - keystone_admin_endpoint is defined
+      - keystone_region is defined
+      - keystone_fernet_key_repository is defined
+      - keystone_credential_key_repository is defined
+      - internal_fqdn is defined
+      - vip_internal is defined
+      - management_ip is defined
+    fail_msg: "Variabel Keystone belum lengkap. Cek group_vars/openstack.yml dan vault.yml."
+
+- name: Set Keystone local marker facts
+  ansible.builtin.set_fact:
+    keystone_db_sync_marker_file: "{{ keystone_db_sync_marker | default('/var/lib/keystone/.db_synced') }}"
+    keystone_bootstrap_marker_file: "{{ keystone_bootstrap_marker | default('/var/lib/keystone/.bootstrapped') }}"
+
+- name: Install Keystone packages
+  ansible.builtin.apt:
+    name: "{{ keystone_packages }}"
+    state: present
+    update_cache: true
+
+- name: Ensure Keystone database exists on bootstrap controller
+  community.mysql.mysql_db:
+    name: "{{ keystone_db_name }}"
+    state: present
+    encoding: utf8
+    collation: utf8_general_ci
+    config_file: /root/.my.cnf
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Ensure Keystone database user exists on bootstrap controller
+  community.mysql.mysql_user:
+    name: "{{ keystone_db_user }}"
+    password: "{{ keystone_db_password }}"
+    host: "%"
+    priv: "{{ keystone_db_name }}.*:ALL"
+    state: present
+    config_file: /root/.my.cnf
+  no_log: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Deploy keystone.conf
+  ansible.builtin.template:
+    src: keystone.conf.j2
+    dest: "{{ keystone_conf_path }}"
+    owner: root
+    group: keystone
+    mode: "0640"
+    backup: true
+
+- name: Check Keystone DB sync marker
+  ansible.builtin.stat:
+    path: "{{ keystone_db_sync_marker_file }}"
+  register: keystone_db_sync_marker_stat
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Check whether Keystone DB already has migrated tables
+  ansible.builtin.shell: |
+    mysql --defaults-extra-file=/root/.my.cnf {{ keystone_db_name }} \
+      --batch --skip-column-names \
+      -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='{{ keystone_db_name }}';"
+  register: keystone_table_count
+  changed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Populate Keystone database on bootstrap controller
+  ansible.builtin.command: keystone-manage db_sync
+  become_user: keystone
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - not keystone_db_sync_marker_stat.stat.exists
+    - keystone_table_count.stdout | int == 0
+
+- name: Create Keystone DB sync marker
+  ansible.builtin.file:
+    path: "{{ keystone_db_sync_marker_file }}"
+    state: touch
+    owner: keystone
+    group: keystone
+    mode: "0600"
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - not keystone_db_sync_marker_stat.stat.exists
+
+# -------------------------------------------------------------------
+# Fernet and credential key setup + HA synchronization
+# -------------------------------------------------------------------
+
+- name: Ensure Keystone key repositories exist on bootstrap controller
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: keystone
+    group: keystone
+    mode: "0700"
+  loop:
+    - "{{ keystone_fernet_key_repository }}"
+    - "{{ keystone_credential_key_repository }}"
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Find Fernet keys on bootstrap controller
+  ansible.builtin.find:
+    paths: "{{ keystone_fernet_key_repository }}"
+    file_type: file
+  register: bootstrap_fernet_keys
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Find credential keys on bootstrap controller
+  ansible.builtin.find:
+    paths: "{{ keystone_credential_key_repository }}"
+    file_type: file
+  register: bootstrap_credential_keys
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Initialize Fernet token repository on bootstrap controller when empty
+  ansible.builtin.command: keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - bootstrap_fernet_keys.matched | int == 0
+
+- name: Initialize Keystone credential repository on bootstrap controller when empty
+  ansible.builtin.command: keystone-manage credential_setup --keystone-user keystone --keystone-group keystone
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - bootstrap_credential_keys.matched | int == 0
+
+- name: Find Fernet keys from bootstrap controller for sync
+  ansible.builtin.find:
+    paths: "{{ keystone_fernet_key_repository }}"
+    file_type: file
+  register: keystone_fernet_files_from_bootstrap
+  delegate_to: "{{ groups['controllers'][0] }}"
+
+- name: Find credential keys from bootstrap controller for sync
+  ansible.builtin.find:
+    paths: "{{ keystone_credential_key_repository }}"
+    file_type: file
+  register: keystone_credential_files_from_bootstrap
+  delegate_to: "{{ groups['controllers'][0] }}"
+
+- name: Assert bootstrap key repositories are not empty before sync
+  ansible.builtin.assert:
+    that:
+      - keystone_fernet_files_from_bootstrap.matched | int > 0
+      - keystone_credential_files_from_bootstrap.matched | int > 0
+    fail_msg: "Key repository di bootstrap controller masih kosong. Cek keystone-manage fernet_setup/credential_setup."
+
+- name: Slurp Fernet key files from bootstrap controller
+  ansible.builtin.slurp:
+    src: "{{ item.path }}"
+  loop: "{{ keystone_fernet_files_from_bootstrap.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: slurped_fernet_keys
+  delegate_to: "{{ groups['controllers'][0] }}"
+  no_log: false
+
+- name: Slurp credential key files from bootstrap controller
+  ansible.builtin.slurp:
+    src: "{{ item.path }}"
+  loop: "{{ keystone_credential_files_from_bootstrap.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: slurped_credential_keys
+  delegate_to: "{{ groups['controllers'][0] }}"
+  no_log: false
+
+- name: Ensure Keystone key repositories exist on this controller
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: keystone
+    group: keystone
+    mode: "0700"
+  loop:
+    - "{{ keystone_fernet_key_repository }}"
+    - "{{ keystone_credential_key_repository }}"
+
+- name: Copy Fernet key files to this controller
+  ansible.builtin.copy:
+    dest: "{{ keystone_fernet_key_repository }}/{{ item.item.path | basename }}"
+    content: "{{ item.content | b64decode }}"
+    owner: keystone
+    group: keystone
+    mode: "0600"
+  loop: "{{ slurped_fernet_keys.results }}"
+  loop_control:
+    label: "{{ item.item.path | basename }}"
+  no_log: false
+
+- name: Copy credential key files to this controller
+  ansible.builtin.copy:
+    dest: "{{ keystone_credential_key_repository }}/{{ item.item.path | basename }}"
+    content: "{{ item.content | b64decode }}"
+    owner: keystone
+    group: keystone
+    mode: "0600"
+  loop: "{{ slurped_credential_keys.results }}"
+  loop_control:
+    label: "{{ item.item.path | basename }}"
+  no_log: false
+
+- name: Fix Keystone key repository directory permissions
+  ansible.builtin.file:
+    path: "{{ item }}"
+    owner: keystone
+    group: keystone
+    mode: "0700"
+    state: directory
+  loop:
+    - "{{ keystone_fernet_key_repository }}"
+    - "{{ keystone_credential_key_repository }}"
+
+- name: Find Fernet keys on this controller
+  ansible.builtin.find:
+    paths: "{{ keystone_fernet_key_repository }}"
+    file_type: file
+  register: local_fernet_keys
+
+- name: Find credential keys on this controller
+  ansible.builtin.find:
+    paths: "{{ keystone_credential_key_repository }}"
+    file_type: file
+  register: local_credential_keys
+
+- name: Assert Keystone key repositories are not empty on this controller
+  ansible.builtin.assert:
+    that:
+      - local_fernet_keys.matched | int > 0
+      - local_credential_keys.matched | int > 0
+    fail_msg: "Fernet atau credential keys kosong pada {{ inventory_hostname }}."
+
+# -------------------------------------------------------------------
+# Keystone bootstrap - idempotent by DB state, not marker only
+# -------------------------------------------------------------------
+
+- name: Check Keystone bootstrap marker
+  ansible.builtin.stat:
+    path: "{{ keystone_bootstrap_marker_file }}"
+  register: keystone_bootstrap_marker_check
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Check whether Keystone admin user exists
+  ansible.builtin.shell: |
+    mysql --defaults-extra-file=/root/.my.cnf {{ keystone_db_name }} \
+      --batch --skip-column-names \
+      -e "SELECT COUNT(*) FROM local_user WHERE name='{{ keystone_admin_user }}';"
+  register: keystone_admin_user_count
+  changed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Check whether Keystone admin project exists
+  ansible.builtin.shell: |
+    mysql --defaults-extra-file=/root/.my.cnf {{ keystone_db_name }} \
+      --batch --skip-column-names \
+      -e "SELECT COUNT(*) FROM project WHERE name='{{ keystone_admin_project }}';"
+  register: keystone_admin_project_count
+  changed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Check whether Keystone identity service exists
+  ansible.builtin.shell: |
+    mysql --defaults-extra-file=/root/.my.cnf {{ keystone_db_name }} \
+      --batch --skip-column-names \
+      -e "SELECT COUNT(*) FROM service WHERE type='identity';"
+  register: keystone_identity_service_count
+  changed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Check Keystone endpoint count
+  ansible.builtin.shell: |
+    mysql --defaults-extra-file=/root/.my.cnf {{ keystone_db_name }} \
+      --batch --skip-column-names \
+      -e "SELECT COUNT(*) FROM endpoint;"
+  register: keystone_endpoint_count
+  changed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Mark Keystone bootstrap complete when DB resources exist
+  ansible.builtin.file:
+    path: "{{ keystone_bootstrap_marker_file }}"
+    state: touch
+    owner: keystone
+    group: keystone
+    mode: "0600"
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - keystone_admin_user_count.stdout | int > 0
+    - keystone_admin_project_count.stdout | int > 0
+    - keystone_identity_service_count.stdout | int > 0
+    - keystone_endpoint_count.stdout | int >= 3
+
+- name: Re-check Keystone bootstrap marker
+  ansible.builtin.stat:
+    path: "{{ keystone_bootstrap_marker_file }}"
+  register: keystone_bootstrap_marker_final
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Bootstrap Keystone identity service
+  ansible.builtin.command: >
+    keystone-manage bootstrap
+    --bootstrap-password {{ keystone_admin_password }}
+    --bootstrap-admin-url {{ keystone_admin_endpoint }}
+    --bootstrap-internal-url {{ keystone_internal_endpoint }}
+    --bootstrap-public-url {{ keystone_public_endpoint }}
+    --bootstrap-region-id {{ keystone_region }}
+  no_log: false
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - not keystone_bootstrap_marker_final.stat.exists
+
+- name: Create Keystone bootstrap marker after bootstrap
+  ansible.builtin.file:
+    path: "{{ keystone_bootstrap_marker_file }}"
+    state: touch
+    owner: keystone
+    group: keystone
+    mode: "0600"
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - not keystone_bootstrap_marker_final.stat.exists
+
+# -------------------------------------------------------------------
+# Apache WSGI backend
+# -------------------------------------------------------------------
+
+- name: Disable default Apache site to avoid port 80 conflict with HAProxy
+  ansible.builtin.command: a2dissite 000-default.conf
+  register: a2dissite_default
+  changed_when: "'already disabled' not in a2dissite_default.stdout"
+  failed_when: false
+
+- name: Deploy Apache ports.conf for Keystone backend only
+  ansible.builtin.template:
+    src: apache-ports.conf.j2
+    dest: /etc/apache2/ports.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+
+- name: Deploy Keystone Apache WSGI site bound to management IP
+  ansible.builtin.template:
+    src: apache-keystone.conf.j2
+    dest: /etc/apache2/sites-available/keystone.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+
+- name: Enable Keystone Apache site
+  ansible.builtin.command: a2ensite keystone.conf
+  register: a2ensite_keystone
+  changed_when: "'already enabled' not in a2ensite_keystone.stdout"
+
+- name: Configure Apache ServerName
+  ansible.builtin.lineinfile:
+    path: /etc/apache2/apache2.conf
+    regexp: '^ServerName '
+    line: "ServerName {{ internal_fqdn }}"
+    state: present
+    backup: true
+
+- name: Enable Apache wsgi module
+  ansible.builtin.command: a2enmod wsgi
+  register: a2enmod_wsgi
+  changed_when: "'already enabled' not in a2enmod_wsgi.stdout"
+
+- name: Validate Apache configuration
+  ansible.builtin.command: apache2ctl configtest
+  changed_when: false
+
+- name: Restart Apache2
+  ansible.builtin.service:
+    name: apache2
+    state: restarted
+    enabled: true
+
+- name: Deploy admin-openrc on controllers
+  ansible.builtin.template:
+    src: admin-openrc.j2
+    dest: /root/admin-openrc
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: false
+
+- name: Validate Keystone API locally
+  ansible.builtin.uri:
+    url: "http://{{ management_ip }}:5000/v3"
+    method: GET
+    status_code:
+      - 200
+      - 300
+      - 401

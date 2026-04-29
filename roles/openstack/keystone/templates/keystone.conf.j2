@@ -1,0 +1,22 @@
+# Managed by Ansible - Keystone Caracal
+
+[DEFAULT]
+debug = false
+log_dir = /var/log/keystone
+
+[database]
+connection = {{ keystone_database_connection }}
+
+[token]
+provider = fernet
+
+[cache]
+enabled = true
+backend = dogpile.cache.memcached
+memcache_servers = {{ keystone_memcached_servers }}
+
+[fernet_tokens]
+key_repository = {{ keystone_fernet_key_repository }}
+
+[credential]
+key_repository = {{ keystone_credential_key_repository }}

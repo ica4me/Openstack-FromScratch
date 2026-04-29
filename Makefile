@@ -54,3 +54,6 @@ vault-view:
 
 msgcache:
 	ansible-playbook -i inventories/lab-5node/hosts.yml playbooks/06-message-cache.yml
+
+keystone:
+	ansible-playbook -i inventories/lab-5node/hosts.yml playbooks/07-keystone.yml
