@@ -1,0 +1,44 @@
+---
+- name: Install Open vSwitch packages
+  ansible.builtin.apt:
+    name: "{{ openvswitch_packages }}"
+    state: present
+    update_cache: true
+
+- name: Ensure Open vSwitch service is enabled and started
+  ansible.builtin.service:
+    name: "{{ openvswitch_service }}"
+    state: started
+    enabled: true
+
+- name: Check if provider bridge exists
+  ansible.builtin.command: "ovs-vsctl br-exists {{ neutron_external_bridge }}"
+  register: br_ex_exists
+  failed_when: false
+  changed_when: false
+
+- name: Create provider bridge br-ex
+  ansible.builtin.command: "ovs-vsctl add-br {{ neutron_external_bridge }}"
+  when: br_ex_exists.rc != 0
+
+- name: Check current ports on provider bridge
+  ansible.builtin.command: "ovs-vsctl list-ports {{ neutron_external_bridge }}"
+  register: br_ex_ports
+  changed_when: false
+
+- name: Add provider interface to br-ex
+  ansible.builtin.command: "ovs-vsctl add-port {{ neutron_external_bridge }} {{ provider_iface }}"
+  when: provider_iface not in br_ex_ports.stdout_lines
+
+- name: Set provider interface external-ids
+  ansible.builtin.command: "ovs-vsctl set Interface {{ provider_iface }} external-ids:iface-role=provider"
+  changed_when: false
+
+- name: Show OVS bridge mapping
+  ansible.builtin.command: ovs-vsctl show
+  register: ovs_show
+  changed_when: false
+
+- name: Print OVS state
+  ansible.builtin.debug:
+    var: ovs_show.stdout_lines

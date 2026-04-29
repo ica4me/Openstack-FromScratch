@@ -1,0 +1,11 @@
+---
+netplan_config_file: /etc/netplan/99-openstack-ansible.yaml
+netplan_renderer: networkd
+
+# Prefix default untuk /24
+management_prefix: 24
+storage_prefix: 24
+
+# Provider interface tidak diberi IP host.
+provider_dhcp4: false
+provider_dhcp6: false

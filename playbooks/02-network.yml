@@ -1,0 +1,41 @@
+---
+- name: Phase 02 - Network and Open vSwitch baseline
+  hosts: network
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: network/netplan
+    - role: network/openvswitch
+
+  post_tasks:
+    - name: Validate management IP is reachable locally
+      ansible.builtin.command: "ip -4 addr show {{ management_iface }}"
+      changed_when: false
+
+    - name: Validate storage IP is reachable locally
+      ansible.builtin.command: "ip -4 addr show {{ storage_iface }}"
+      changed_when: false
+
+    - name: Validate provider interface has no IPv4 address
+      ansible.builtin.shell: |
+        ip -4 addr show {{ provider_iface }} | grep -q 'inet ' && exit 1 || exit 0
+      changed_when: false
+
+    - name: Validate br-ex exists
+      ansible.builtin.command: ovs-vsctl br-exists {{ neutron_external_bridge }}
+      changed_when: false
+
+    - name: Validate provider interface is attached to br-ex
+      ansible.builtin.shell: |
+        ovs-vsctl list-ports {{ neutron_external_bridge }} | grep -w {{ provider_iface }}
+      changed_when: false
+
+    - name: Print network phase summary
+      ansible.builtin.debug:
+        msg:
+          - "Network phase completed on {{ inventory_hostname }}"
+          - "Storage iface: {{ storage_iface }} / {{ storage_ip }}"
+          - "Management iface: {{ management_iface }} / {{ management_ip }}"
+          - "Provider iface: {{ provider_iface }} / bridge {{ neutron_external_bridge }}"
+          - "VXLAN local IP: {{ neutron_local_ip }}"

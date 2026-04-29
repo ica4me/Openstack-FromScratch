@@ -1,0 +1,33 @@
+# Managed by Ansible - OpenStack Caracal network baseline
+network:
+  version: 2
+  renderer: {{ netplan_renderer }}
+  ethernets:
+    {{ storage_iface }}:
+      dhcp4: false
+      dhcp6: false
+      addresses:
+        - {{ storage_ip }}/{{ storage_prefix }}
+      optional: true
+
+    {{ management_iface }}:
+      dhcp4: false
+      dhcp6: false
+      addresses:
+        - {{ management_ip }}/{{ management_prefix }}
+      routes:
+        - to: default
+          via: {{ management_gateway }}
+      nameservers:
+        addresses:
+{% for dns in dns_servers %}
+          - {{ dns }}
+{% endfor %}
+      optional: false
+
+    {{ provider_iface }}:
+      dhcp4: false
+      dhcp6: false
+      accept-ra: false
+      link-local: []
+      optional: true

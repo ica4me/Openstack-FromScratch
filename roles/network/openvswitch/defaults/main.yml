@@ -1,0 +1,5 @@
+---
+openvswitch_packages:
+  - openvswitch-switch
+
+openvswitch_service: openvswitch-switch

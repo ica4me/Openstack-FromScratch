@@ -1,0 +1,72 @@
+---
+- name: Assert expected network variables exist
+  ansible.builtin.assert:
+    that:
+      - management_ip is defined
+      - storage_ip is defined
+      - management_iface is defined
+      - storage_iface is defined
+      - provider_iface is defined
+      - management_gateway is defined
+      - dns_servers is defined
+    fail_msg: "Variabel network wajib belum lengkap."
+
+- name: Assert expected interfaces exist before applying netplan
+  ansible.builtin.assert:
+    that:
+      - storage_iface in ansible_facts.interfaces
+      - management_iface in ansible_facts.interfaces
+      - provider_iface in ansible_facts.interfaces
+    fail_msg: "Interface tidak ditemukan. Cek eth0/ens19/ens20 di inventory."
+
+- name: Backup existing netplan directory
+  ansible.builtin.archive:
+    path: /etc/netplan
+    dest: "/root/netplan-backup-{{ ansible_date_time.iso8601_basic_short }}.tgz"
+    format: gz
+  ignore_errors: true
+
+- name: Disable cloud-init network config if present
+  ansible.builtin.copy:
+    dest: /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      network: {config: disabled}
+  when: ansible_facts['distribution'] == 'Ubuntu'
+
+- name: Deploy OpenStack netplan configuration
+  ansible.builtin.template:
+    src: 99-openstack-ansible.yaml.j2
+    dest: "{{ netplan_config_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+    backup: true
+  notify:
+    - Generate netplan
+    - Apply netplan
+
+- name: Flush netplan handlers now
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for SSH to come back on management IP
+  ansible.builtin.wait_for_connection:
+    timeout: 60
+    delay: 5
+
+- name: Validate management interface has expected IP
+  ansible.builtin.shell: |
+    ip -4 -br addr show {{ management_iface }} | grep -F "{{ management_ip }}/"
+  changed_when: false
+
+- name: Validate storage interface has expected IP
+  ansible.builtin.shell: |
+    ip -4 -br addr show {{ storage_iface }} | grep -F "{{ storage_ip }}/"
+  changed_when: false
+
+- name: Validate provider interface has no IPv4 address
+  ansible.builtin.shell: |
+    ip -4 -br addr show {{ provider_iface }} | grep -q ' [0-9]' && exit 1 || exit 0
+  changed_when: false
