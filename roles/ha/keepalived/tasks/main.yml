@@ -1,0 +1,56 @@
+---
+- name: Assert Keepalived variables exist
+  ansible.builtin.assert:
+    that:
+      - keepalived_virtual_ip is defined
+      - keepalived_interface is defined
+      - keepalived_priority is defined
+      - keepalived_router_id is defined
+      - keepalived_auth_pass is defined
+    fail_msg: "Variabel Keepalived belum lengkap."
+
+- name: Assert VIP interface exists
+  ansible.builtin.assert:
+    that:
+      - keepalived_interface in ansible_facts.interfaces
+    fail_msg: "Interface VIP {{ keepalived_interface }} tidak ditemukan."
+
+- name: Install keepalived
+  ansible.builtin.apt:
+    name: "{{ keepalived_package }}"
+    state: present
+    update_cache: true
+
+- name: Ensure keepalived config directory exists
+  ansible.builtin.file:
+    path: /etc/keepalived
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install HAProxy health check script
+  ansible.builtin.copy:
+    dest: "{{ keepalived_check_script }}"
+    owner: root
+    group: root
+    mode: "0755"
+    content: |
+      #!/usr/bin/env bash
+      systemctl is-active --quiet haproxy
+
+- name: Deploy keepalived configuration
+  ansible.builtin.template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  notify: Restart keepalived
+
+- name: Enable and start keepalived
+  ansible.builtin.service:
+    name: "{{ keepalived_service }}"
+    state: started
+    enabled: true

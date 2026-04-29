@@ -1,0 +1,35 @@
+# Managed by Ansible - OpenStack HA VIP
+
+global_defs {
+  router_id {{ inventory_hostname }}
+  enable_script_security
+  script_user root
+}
+
+vrrp_script chk_haproxy {
+  script "{{ keepalived_check_script }}"
+  interval {{ keepalived_check_interval }}
+  fall {{ keepalived_fall }}
+  rise {{ keepalived_rise }}
+}
+
+vrrp_instance VI_OPENSTACK_API {
+  state {{ keepalived_state }}
+  interface {{ keepalived_interface }}
+  virtual_router_id {{ keepalived_router_id }}
+  priority {{ keepalived_priority }}
+  advert_int 1
+
+  authentication {
+    auth_type {{ keepalived_auth_type }}
+    auth_pass {{ keepalived_auth_pass }}
+  }
+
+  virtual_ipaddress {
+    {{ keepalived_virtual_ip }}/24 dev {{ keepalived_interface }}
+  }
+
+  track_script {
+    chk_haproxy
+  }
+}

@@ -1,0 +1,8 @@
+---
+keepalived_package: keepalived
+keepalived_service: keepalived
+
+keepalived_check_script: /etc/keepalived/check_haproxy.sh
+keepalived_check_interval: 2
+keepalived_fall: 2
+keepalived_rise: 2

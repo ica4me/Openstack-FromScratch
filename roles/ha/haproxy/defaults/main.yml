@@ -1,0 +1,9 @@
+---
+haproxy_package: haproxy
+haproxy_service: haproxy
+
+haproxy_cfg_path: /etc/haproxy/haproxy.cfg
+haproxy_log_socket: /dev/log
+haproxy_connect_timeout: 5000
+haproxy_client_timeout: 50000
+haproxy_server_timeout: 50000

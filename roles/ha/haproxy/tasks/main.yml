@@ -1,0 +1,42 @@
+---
+- name: Assert HAProxy variables exist
+  ansible.builtin.assert:
+    that:
+      - haproxy_openstack_services is defined
+      - haproxy_openstack_services | length > 0
+      - vip_internal is defined
+    fail_msg: "Variabel HAProxy belum lengkap."
+
+- name: Install HAProxy
+  ansible.builtin.apt:
+    name: "{{ haproxy_package }}"
+    state: present
+    update_cache: true
+
+- name: Ensure HAProxy can bind to non-local VIP
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_nonlocal_bind
+    value: "1"
+    state: present
+    reload: true
+    sysctl_file: /etc/sysctl.d/99-openstack-ha.conf
+
+- name: Deploy HAProxy configuration
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: "{{ haproxy_cfg_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  notify: Restart haproxy
+
+- name: Validate HAProxy config before restart
+  ansible.builtin.command: "haproxy -c -f {{ haproxy_cfg_path }}"
+  changed_when: false
+
+- name: Enable and start HAProxy
+  ansible.builtin.service:
+    name: "{{ haproxy_service }}"
+    state: started
+    enabled: true

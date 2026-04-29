@@ -1,0 +1,5 @@
+---
+- name: Restart haproxy
+  ansible.builtin.service:
+    name: "{{ haproxy_service }}"
+    state: restarted

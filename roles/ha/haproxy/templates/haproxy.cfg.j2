@@ -1,0 +1,46 @@
+# Managed by Ansible - OpenStack HAProxy
+
+global
+    log {{ haproxy_log_socket }} local0
+    log {{ haproxy_log_socket }} local1 notice
+    chroot /var/lib/haproxy
+    stats socket /run/haproxy/admin.sock mode 660 level admin expose-fd listeners
+    stats timeout 30s
+    user haproxy
+    group haproxy
+    daemon
+    maxconn {{ haproxy_global_maxconn }}
+
+defaults
+    log global
+    mode http
+    option httplog
+    option dontlognull
+    option redispatch
+    retries 3
+    timeout connect {{ haproxy_connect_timeout }}
+    timeout client {{ haproxy_client_timeout }}
+    timeout server {{ haproxy_server_timeout }}
+
+{% if haproxy_stats_enabled | bool %}
+listen stats
+    bind {{ haproxy_stats_bind }}
+    mode http
+    stats enable
+    stats uri {{ haproxy_stats_uri }}
+    stats refresh 10s
+{% endif %}
+
+{% for svc in haproxy_openstack_services %}
+listen {{ svc.name }}
+    bind {{ svc.bind_ip }}:{{ svc.bind_port }}
+    mode {{ svc.mode | default('http') }}
+    balance roundrobin
+{% if svc.mode | default('http') == 'http' %}
+    option httpchk
+{% endif %}
+{% for host in groups['controllers'] %}
+    server {{ host }} {{ hostvars[host].management_ip }}:{{ svc.backend_port }} check inter 2000 rise 2 fall 3
+{% endfor %}
+
+{% endfor %}

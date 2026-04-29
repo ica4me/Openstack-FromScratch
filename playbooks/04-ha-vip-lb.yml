@@ -1,0 +1,42 @@
+---
+- name: Phase 04 - HA VIP and HAProxy baseline
+  hosts: controllers
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: ha/keepalived
+    - role: ha/haproxy
+
+  post_tasks:
+    - name: Validate keepalived service is active
+      ansible.builtin.command: systemctl is-active keepalived
+      changed_when: false
+
+    - name: Validate haproxy service is active
+      ansible.builtin.command: systemctl is-active haproxy
+      changed_when: false
+
+    - name: Validate HAProxy configuration
+      ansible.builtin.command: haproxy -c -f /etc/haproxy/haproxy.cfg
+      changed_when: false
+
+    - name: Check VIP status on controllers
+      ansible.builtin.shell: "ip -4 addr show {{ vip_interface }} | grep -F '{{ vip_internal }}' || true"
+      register: vip_check
+      changed_when: false
+
+    - name: Print VIP status
+      ansible.builtin.debug:
+        msg:
+          - "Host: {{ inventory_hostname }}"
+          - "VIP interface: {{ vip_interface }}"
+          - "VIP: {{ vip_internal }}"
+          - "VIP check: {{ vip_check.stdout | default('not-present-on-this-node') }}"
+
+    - name: Print HA phase summary
+      ansible.builtin.debug:
+        msg:
+          - "HA phase completed on {{ inventory_hostname }}"
+          - "Keepalived VIP: {{ vip_internal }} on {{ vip_interface }}"
+          - "HAProxy installed and validated"
