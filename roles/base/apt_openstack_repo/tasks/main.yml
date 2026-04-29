@@ -1,0 +1,64 @@
+---
+- name: Ensure packages required for Ubuntu Cloud Archive are installed
+  ansible.builtin.apt:
+    name:
+      - software-properties-common
+      - ubuntu-cloud-keyring
+      - python3-apt
+    state: present
+    update_cache: true
+
+- name: Check whether Ubuntu Cloud Archive Caracal source already exists
+  ansible.builtin.shell: |
+    grep -R "ubuntu-cloud.archive.canonical.com/ubuntu.*caracal" /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+  register: uca_caracal_source
+  changed_when: false
+
+- name: Enable Ubuntu Cloud Archive for OpenStack Caracal
+  ansible.builtin.command: add-apt-repository -y cloud-archive:caracal
+  when: uca_caracal_source.stdout | length == 0
+  register: add_uca_caracal
+
+- name: Update apt cache after enabling Ubuntu Cloud Archive
+  ansible.builtin.apt:
+    update_cache: true
+  retries: 3
+  delay: 10
+  register: apt_update_after_uca
+  until: apt_update_after_uca is succeeded
+
+- name: Upgrade packages after enabling OpenStack archive
+  ansible.builtin.apt:
+    upgrade: dist
+    update_cache: true
+  register: apt_dist_upgrade
+  retries: 3
+  delay: 10
+  until: apt_dist_upgrade is succeeded
+
+- name: Install OpenStack client package
+  ansible.builtin.apt:
+    name:
+      - python3-openstackclient
+      - crudini
+    state: present
+
+- name: Check OpenStack client version
+  ansible.builtin.command: openstack --version
+  register: openstack_client_version
+  changed_when: false
+  failed_when: false
+
+- name: Show OpenStack client version
+  ansible.builtin.debug:
+    var: openstack_client_version.stdout
+
+- name: Show Ubuntu Cloud Archive Caracal source
+  ansible.builtin.shell: |
+    grep -R "caracal" /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+  register: uca_caracal_check
+  changed_when: false
+
+- name: Print Ubuntu Cloud Archive source check
+  ansible.builtin.debug:
+    var: uca_caracal_check.stdout_lines

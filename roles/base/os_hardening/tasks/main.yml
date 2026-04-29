@@ -1,0 +1,46 @@
+---
+- name: Ensure limits.d directory exists
+  ansible.builtin.file:
+    path: /etc/security/limits.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure OpenStack nofile and nproc limits
+  ansible.builtin.copy:
+    dest: /etc/security/limits.d/99-openstack.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible - OpenStack limits
+      {% for limit in openstack_limits %}
+      {{ limit.domain }} {{ limit.type }} {{ limit.item }} {{ limit.value }}
+      {% endfor %}
+
+- name: Ensure pam_limits is enabled for common-session
+  ansible.builtin.lineinfile:
+    path: /etc/pam.d/common-session
+    line: "session required pam_limits.so"
+    state: present
+    backup: true
+
+- name: Ensure pam_limits is enabled for common-session-noninteractive
+  ansible.builtin.lineinfile:
+    path: /etc/pam.d/common-session-noninteractive
+    line: "session required pam_limits.so"
+    state: present
+    backup: true
+
+- name: Disable swap immediately if active
+  ansible.builtin.command: swapoff -a
+  when: ansible_swaptotal_mb | int > 0
+  changed_when: true
+
+- name: Disable swap in fstab
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: '^([^#].*\sswap\s.*)$'
+    replace: '# \1'
+    backup: true

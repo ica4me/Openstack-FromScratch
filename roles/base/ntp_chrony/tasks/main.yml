@@ -1,0 +1,32 @@
+---
+- name: Install chrony
+  ansible.builtin.apt:
+    name: "{{ chrony_package }}"
+    state: present
+    update_cache: true
+
+- name: Configure chrony
+  ansible.builtin.template:
+    src: chrony.conf.j2
+    dest: /etc/chrony/chrony.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  notify: Restart chrony
+
+- name: Ensure chrony is enabled and started
+  ansible.builtin.service:
+    name: "{{ chrony_service }}"
+    state: started
+    enabled: true
+
+- name: Check chrony tracking
+  ansible.builtin.command: chronyc tracking
+  register: chrony_tracking
+  changed_when: false
+  failed_when: false
+
+- name: Show chrony tracking summary
+  ansible.builtin.debug:
+    var: chrony_tracking.stdout_lines

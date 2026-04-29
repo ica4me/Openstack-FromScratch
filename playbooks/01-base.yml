@@ -1,0 +1,21 @@
+---
+- name: Phase 01 - Base OS preparation
+  hosts: openstack
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: base/common
+    - role: base/ntp_chrony
+    - role: base/apt_openstack_repo
+    - role: base/os_hardening
+    - role: base/kernel_tuning
+
+  post_tasks:
+    - name: Print base phase summary
+      ansible.builtin.debug:
+        msg:
+          - "Base phase completed on {{ inventory_hostname }}"
+          - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "OpenStack archive: {{ openstack_cloud_archive }}"
+          - "Timezone: {{ timezone }}"

@@ -1,0 +1,20 @@
+---
+disable_ipv6: false
+
+openstack_limits:
+  - domain: "*"
+    type: soft
+    item: nofile
+    value: 1048576
+  - domain: "*"
+    type: hard
+    item: nofile
+    value: 1048576
+  - domain: "*"
+    type: soft
+    item: nproc
+    value: 1048576
+  - domain: "*"
+    type: hard
+    item: nproc
+    value: 1048576

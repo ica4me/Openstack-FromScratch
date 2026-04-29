@@ -1,0 +1,16 @@
+# Managed by Ansible - OpenStack Caracal HA
+
+{% for server in chrony_ntp_servers %}
+pool {{ server }} iburst
+{% endfor %}
+
+driftfile /var/lib/chrony/chrony.drift
+logdir /var/log/chrony
+
+maxupdateskew 100.0
+rtcsync
+makestep 1 3
+
+{% for network in chrony_allow_networks %}
+allow {{ network }}
+{% endfor %}

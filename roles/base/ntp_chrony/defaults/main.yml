@@ -1,0 +1,14 @@
+---
+chrony_package: chrony
+chrony_service: chrony
+
+chrony_ntp_servers:
+  - 0.id.pool.ntp.org
+  - 1.id.pool.ntp.org
+  - 2.id.pool.ntp.org
+  - 3.id.pool.ntp.org
+
+chrony_allow_networks:
+  - 172.16.1.0/24
+  - 172.16.2.0/24
+  - 172.16.3.0/24

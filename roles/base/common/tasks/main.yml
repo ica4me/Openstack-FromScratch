@@ -1,0 +1,50 @@
+---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install common packages
+  ansible.builtin.apt:
+    name: "{{ common_packages }}"
+    state: present
+  retries: 3
+  delay: 10
+  register: common_pkg_result
+  until: common_pkg_result is succeeded
+
+- name: Set timezone
+  community.general.timezone:
+    name: "{{ timezone }}"
+
+- name: Ensure /etc/hosts contains OpenStack entries
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: "^{{ item.ip | regex_escape() }}\\s+"
+    line: "{{ item.ip }} {{ item.name }}"
+    state: present
+    create: true
+    backup: true
+  loop: "{{ hosts_entries }}"
+
+- name: Ensure root SSH directory exists
+  ansible.builtin.file:
+    path: /root/.ssh
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Ensure bash history timestamp format
+  ansible.builtin.lineinfile:
+    path: /etc/profile.d/history-timestamp.sh
+    line: 'export HISTTIMEFORMAT="%F %T "'
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Check basic hostname resolution
+  ansible.builtin.command: "getent hosts {{ item.name.split()[0] }}"
+  loop: "{{ hosts_entries }}"
+  changed_when: false

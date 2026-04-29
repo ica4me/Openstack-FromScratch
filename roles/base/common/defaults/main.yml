@@ -1,0 +1,30 @@
+---
+common_packages:
+  - software-properties-common
+  - python3-pip
+  - python3-venv
+  - python3-dev
+  - python3-setuptools
+  - python3-openstackclient
+  - crudini
+  - curl
+  - wget
+  - vim
+  - jq
+  - rsync
+  - lsof
+  - net-tools
+  - iproute2
+  - iputils-ping
+  - dnsutils
+  - tcpdump
+  - netcat-openbsd
+  - bridge-utils
+  - iftop
+  - htop
+  - chrony
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - apt-transport-https
+  - ubuntu-cloud-keyring

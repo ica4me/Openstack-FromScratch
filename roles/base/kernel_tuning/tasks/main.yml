@@ -1,0 +1,29 @@
+---
+- name: Ensure br_netfilter module is loaded
+  community.general.modprobe:
+    name: br_netfilter
+    state: present
+
+- name: Ensure overlay module is loaded
+  community.general.modprobe:
+    name: overlay
+    state: present
+
+- name: Persist kernel modules
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/openstack.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      br_netfilter
+      overlay
+
+- name: Apply OpenStack sysctl tuning
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+    sysctl_file: /etc/sysctl.d/99-openstack.conf
+  loop: "{{ openstack_sysctl | dict2items }}"
