@@ -1,0 +1,23 @@
+# Managed by Ansible - MariaDB Galera for OpenStack
+
+[mariadb]
+bind-address={{ mariadb_bind_address }}
+port={{ mariadb_port }}
+
+wsrep_on=ON
+wsrep_provider={{ galera_wsrep_provider }}
+
+wsrep_cluster_name="{{ galera_cluster_name }}"
+wsrep_cluster_address="{{ galera_cluster_address }}"
+
+wsrep_node_name="{{ inventory_hostname }}"
+wsrep_node_address="{{ management_ip }}"
+
+wsrep_sst_method={{ galera_sst_method }}
+
+binlog_format=ROW
+default_storage_engine=InnoDB
+innodb_autoinc_lock_mode=2
+
+wsrep_provider_options="gmcast.listen_addr=tcp://{{ management_ip }}:4567"
+wsrep_sst_receive_address="{{ management_ip }}:4444"

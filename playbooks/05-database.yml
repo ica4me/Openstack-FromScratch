@@ -1,0 +1,48 @@
+---
+- name: Phase 05 - MariaDB Galera Cluster
+  hosts: controllers
+  become: true
+  gather_facts: true
+  serial: 1
+
+  roles:
+    - role: infra/mariadb_galera
+
+  post_tasks:
+    - name: Check MariaDB service
+      ansible.builtin.command: systemctl is-active mariadb
+      changed_when: false
+
+- name: Phase 05 - Validate Galera cluster
+  hosts: controllers
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Validate wsrep cluster size equals controller count
+      ansible.builtin.shell: |
+        mysql --defaults-extra-file=/root/.my.cnf \
+          -e "SHOW STATUS LIKE 'wsrep_cluster_size';" \
+          --batch --skip-column-names | awk '{print $2}'
+      register: final_wsrep_cluster_size
+      changed_when: false
+      no_log: true
+      run_once: true
+      delegate_to: "{{ groups['controllers'][0] }}"
+
+    - name: Assert Galera cluster size
+      ansible.builtin.assert:
+        that:
+          - final_wsrep_cluster_size.stdout | int == groups['controllers'] | length
+        fail_msg: "Galera cluster size belum sesuai jumlah controller."
+        success_msg: "Galera cluster size valid."
+      run_once: true
+
+    - name: Print database phase summary
+      ansible.builtin.debug:
+        msg:
+          - "MariaDB Galera phase completed."
+          - "Bootstrap controller: {{ groups['controllers'][0] }}"
+          - "Controllers: {{ groups['controllers'] | join(', ') }}"
+          - "Cluster size: {{ final_wsrep_cluster_size.stdout }}"
+      run_once: true

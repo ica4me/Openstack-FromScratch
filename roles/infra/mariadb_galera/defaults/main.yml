@@ -1,0 +1,20 @@
+---
+mariadb_packages:
+  - mariadb-server
+  - mariadb-client
+  - galera-4
+  - python3-pymysql
+  - rsync
+
+mariadb_service: mariadb
+
+mariadb_config_dir: /etc/mysql/mariadb.conf.d
+mariadb_galera_config: /etc/mysql/mariadb.conf.d/99-openstack-galera.cnf
+mariadb_openstack_config: /etc/mysql/mariadb.conf.d/98-openstack.cnf
+
+mariadb_max_connections: 4096
+mariadb_innodb_buffer_pool_size: 1G
+mariadb_character_set: utf8mb4
+mariadb_collation: utf8mb4_general_ci
+
+galera_bootstrap_marker: /var/lib/mysql/.openstack_galera_bootstrapped

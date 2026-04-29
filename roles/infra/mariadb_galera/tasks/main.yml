@@ -1,0 +1,172 @@
+---
+- name: Assert MariaDB Galera variables exist
+  ansible.builtin.assert:
+    that:
+      - vault_mysql_root_password is defined
+      - galera_cluster_name is defined
+      - galera_cluster_address is defined
+      - galera_bootstrap_node is defined
+      - management_ip is defined
+    fail_msg: "Variabel MariaDB/Galera belum lengkap."
+
+- name: Install MariaDB and Galera packages
+  ansible.builtin.apt:
+    name: "{{ mariadb_packages }}"
+    state: present
+    update_cache: true
+
+- name: Deploy OpenStack MariaDB tuning config
+  ansible.builtin.template:
+    src: 99-openstack.cnf.j2
+    dest: "{{ mariadb_openstack_config }}"
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+
+- name: Deploy Galera config
+  ansible.builtin.template:
+    src: 60-galera.cnf.j2
+    dest: "{{ mariadb_galera_config }}"
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: galera_config_deploy
+
+- name: Check MariaDB active state
+  ansible.builtin.command: systemctl is-active mariadb
+  register: mariadb_active
+  failed_when: false
+  changed_when: false
+
+- name: Stop bootstrap node when Galera config changed and MariaDB is active
+  ansible.builtin.service:
+    name: "{{ mariadb_service }}"
+    state: stopped
+  when:
+    - inventory_hostname == galera_bootstrap_node
+    - mariadb_active.rc == 0
+    - galera_config_deploy.changed
+
+- name: Bootstrap Galera primary node when MariaDB is not active or config changed
+  ansible.builtin.command: galera_new_cluster
+  when:
+    - inventory_hostname == galera_bootstrap_node
+    - mariadb_active.rc != 0 or galera_config_deploy.changed
+
+- name: Start or restart non-bootstrap nodes to join Galera
+  ansible.builtin.service:
+    name: "{{ mariadb_service }}"
+    state: restarted
+    enabled: true
+  when: inventory_hostname != galera_bootstrap_node
+
+- name: Ensure MariaDB is enabled
+  ansible.builtin.service:
+    name: "{{ mariadb_service }}"
+    enabled: true
+
+- name: Wait for MariaDB port
+  ansible.builtin.wait_for:
+    host: "{{ management_ip }}"
+    port: 3306
+    timeout: 120
+
+- name: Write root MySQL client config on bootstrap node
+  ansible.builtin.copy:
+    dest: /root/.my.cnf
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      [client]
+      user=root
+      password={{ vault_mysql_root_password }}
+      socket=/run/mysqld/mysqld.sock
+  no_log: true
+  when: inventory_hostname == galera_bootstrap_node
+
+- name: Check root login using configured password
+  ansible.builtin.command: mysql --defaults-extra-file=/root/.my.cnf -e "SELECT 1;"
+  register: root_login_with_password
+  changed_when: false
+  failed_when: false
+  no_log: true
+  when: inventory_hostname == galera_bootstrap_node
+
+- name: Set MariaDB root password only when password login is not working
+  community.mysql.mysql_user:
+    name: root
+    host: localhost
+    password: "{{ vault_mysql_root_password }}"
+    priv: "*.*:ALL,GRANT"
+    login_unix_socket: /run/mysqld/mysqld.sock
+    check_implicit_admin: true
+    state: present
+  no_log: true
+  when:
+    - inventory_hostname == galera_bootstrap_node
+    - root_login_with_password.rc != 0
+
+- name: Create root user for 127.0.0.1 on bootstrap node
+  community.mysql.mysql_user:
+    name: root
+    host: 127.0.0.1
+    password: "{{ vault_mysql_root_password }}"
+    priv: "*.*:ALL,GRANT"
+    login_unix_socket: /run/mysqld/mysqld.sock
+    config_file: /root/.my.cnf
+    state: present
+  no_log: true
+  when: inventory_hostname == galera_bootstrap_node
+
+- name: Remove anonymous MariaDB users on bootstrap node
+  community.mysql.mysql_user:
+    name: ''
+    host_all: true
+    state: absent
+    login_unix_socket: /run/mysqld/mysqld.sock
+    config_file: /root/.my.cnf
+  no_log: true
+  when: inventory_hostname == galera_bootstrap_node
+
+- name: Remove test database on bootstrap node
+  community.mysql.mysql_db:
+    name: test
+    state: absent
+    login_unix_socket: /run/mysqld/mysqld.sock
+    config_file: /root/.my.cnf
+  no_log: true
+  when: inventory_hostname == galera_bootstrap_node
+
+- name: Create OpenStack service databases on bootstrap node
+  community.mysql.mysql_db:
+    name: "{{ item }}"
+    state: present
+    encoding: utf8
+    collation: utf8_general_ci
+    login_unix_socket: /run/mysqld/mysqld.sock
+    config_file: /root/.my.cnf
+  loop: "{{ mariadb_openstack_databases }}"
+  no_log: true
+  when: inventory_hostname == galera_bootstrap_node
+
+- name: Check wsrep local status
+  ansible.builtin.shell: |
+    mysql --protocol=socket -uroot -p'{{ vault_mysql_root_password }}' \
+      -S /run/mysqld/mysqld.sock \
+      -e "SHOW STATUS WHERE Variable_name IN ('wsrep_cluster_size','wsrep_cluster_status','wsrep_ready','wsrep_local_state_comment');" \
+      --batch
+  register: wsrep_status
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Print Galera local service summary
+  ansible.builtin.debug:
+    msg:
+      - "MariaDB/Galera configured on {{ inventory_hostname }}"
+      - "Node IP: {{ management_ip }}"
+      - "Cluster: {{ galera_cluster_name }}"
+      - "Status command executed."

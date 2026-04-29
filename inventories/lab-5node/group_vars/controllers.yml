@@ -72,3 +72,30 @@ haproxy_openstack_services:
     backend_port: 80
     mode: http
     check_type: tcp
+
+# MariaDB Galera
+mariadb_bind_address: "0.0.0.0"
+mariadb_port: 3306
+
+galera_cluster_name: openstack_galera
+galera_wsrep_provider: /usr/lib/galera/libgalera_smm.so
+galera_sst_method: rsync
+galera_bootstrap_node: "{{ bootstrap_controller }}"
+galera_cluster_nodes: "{{ groups['controllers'] }}"
+galera_cluster_address: >-
+  gcomm://{{ groups['controllers']
+    | map('extract', hostvars, 'management_ip')
+    | join(',') }}
+
+mariadb_openstack_databases:
+  - keystone
+  - glance
+  - placement
+  - nova
+  - nova_api
+  - nova_cell0
+  - neutron
+  - cinder
+  - gnocchi
+  - aodh
+  - masakari

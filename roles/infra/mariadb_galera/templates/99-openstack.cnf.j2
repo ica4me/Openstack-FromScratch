@@ -1,0 +1,17 @@
+# Managed by Ansible - MariaDB tuning for OpenStack
+
+[mysqld]
+bind-address = {{ mariadb_bind_address }}
+port = {{ mariadb_port }}
+
+max_connections = {{ mariadb_max_connections }}
+character-set-server = {{ mariadb_character_set }}
+collation-server = {{ mariadb_collation }}
+
+default-storage-engine = innodb
+innodb_file_per_table = 1
+innodb_buffer_pool_size = {{ mariadb_innodb_buffer_pool_size }}
+innodb_flush_log_at_trx_commit = 2
+innodb_flush_method = O_DIRECT
+
+skip-name-resolve
