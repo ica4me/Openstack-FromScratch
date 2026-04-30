@@ -44,3 +44,31 @@ neutron_bridge_mappings:
 
 neutron_flat_networks:
   - provider
+
+# Neutron ML2 + OVS advanced config
+neutron_tunnel_types:
+  - vxlan
+
+neutron_vxlan_vni_ranges: "1:1000"
+
+neutron_enable_l3_ha: true
+neutron_max_l3_agents_per_router: 3
+neutron_min_l3_agents_per_router: 2
+neutron_dhcp_agents_per_network: 2
+neutron_enable_dvr: false
+
+# External/provider network untuk validasi setelah Neutron
+external_network_name: public
+external_subnet_name: public-subnet
+external_cidr: 172.16.3.0/24
+external_gateway: 172.16.3.1
+external_allocation_start: 172.16.3.100
+external_allocation_end: 172.16.3.199
+
+# Tenant/self-service network untuk smoke test setelah Neutron
+tenant_network_name: private
+tenant_subnet_name: private-subnet
+tenant_cidr: 10.10.0.0/24
+tenant_gateway: 10.10.0.1
+tenant_dns_nameservers:
+  - 8.8.8.8

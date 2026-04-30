@@ -1,0 +1,18 @@
+# Managed by Ansible - Neutron ML2 config
+
+[ml2]
+type_drivers = {{ neutron_type_drivers | join(',') }}
+tenant_network_types = {{ neutron_tenant_network_types | join(',') }}
+mechanism_drivers = {{ neutron_mechanism_driver }}
+extension_drivers = port_security
+
+[ml2_type_flat]
+flat_networks = {{ neutron_flat_networks | join(',') }}
+
+[ml2_type_vxlan]
+vni_ranges = {{ neutron_vxlan_vni_ranges }}
+
+[securitygroup]
+enable_ipset = true
+enable_security_group = true
+firewall_driver = openvswitch

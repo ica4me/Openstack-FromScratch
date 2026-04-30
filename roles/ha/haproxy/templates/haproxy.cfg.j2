@@ -31,6 +31,28 @@ listen stats
     stats refresh 10s
 {% endif %}
 
+
+#{% for svc in haproxy_openstack_services %}
+#listen {{ svc.name }}
+#    bind {{ svc.bind_ip }}:{{ svc.bind_port }}
+#    mode {{ svc.mode | default('http') }}
+#    balance roundrobin
+#{% if svc.mode | default('http') == 'http' %}
+#{% if svc.httpchk is defined %}
+#    option httpchk {{ svc.httpchk.method | default('GET') }} {{ svc.httpchk.uri | default('/') }}
+#{% if svc.httpchk.expect_status is defined %}
+#    http-check expect status {{ svc.httpchk.expect_status }}
+#{% endif %}
+#{% else %}
+#    option httpchk
+#{% endif %}
+#{% endif %}
+#{% for host in groups['controllers'] %}
+#    server {{ host }} {{ hostvars[host].management_ip }}:{{ svc.backend_port }} check inter 2000 rise 2 fall 3
+#{% endfor %}
+
+#{% endfor %}
+
 {% for svc in haproxy_openstack_services %}
 listen {{ svc.name }}
     bind {{ svc.bind_ip }}:{{ svc.bind_port }}
@@ -43,7 +65,8 @@ listen {{ svc.name }}
     http-check expect status {{ svc.httpchk.expect_status }}
 {% endif %}
 {% else %}
-    option httpchk
+    option httpchk GET /
+    http-check expect status 200
 {% endif %}
 {% endif %}
 {% for host in groups['controllers'] %}

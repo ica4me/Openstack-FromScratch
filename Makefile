@@ -2,7 +2,9 @@
 INV ?= inventories/lab-5node/hosts.yml
 LIMIT ?= all
 
-.PHONY: ping graph vars preflight base network ceph ha db msg core validate all vault-edit vault-view
+#.PHONY: ping graph vars preflight base network ceph ha db msg core validate all vault-edit vault-view
+
+.PHONY: ping graph vars preflight base network ceph ha db msg core neutron validate all vault-edit vault-view
 
 ping:
 	ansible -i $(INV) $(LIMIT) -m ping
@@ -63,3 +65,6 @@ image-placement:
 
 nova:
 	ansible-playbook -i inventories/lab-5node/hosts.yml playbooks/09-nova.yml
+
+neutron:
+	ansible-playbook -i $(INV) playbooks/10-neutron.yml

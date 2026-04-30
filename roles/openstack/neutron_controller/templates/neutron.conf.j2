@@ -1,0 +1,56 @@
+# Managed by Ansible - Neutron controller config
+[DEFAULT]
+bind_host = {{ neutron_bind_host }}
+bind_port = {{ neutron_bind_port }}
+core_plugin = ml2
+service_plugins = router
+allow_overlapping_ips = true
+auth_strategy = keystone
+transport_url = rabbit://{% for host in groups['controllers'] %}{{ rabbitmq_openstack_user }}:{{ rabbitmq_openstack_password }}@{{ hostvars[host].management_ip }}:5672{% if not loop.last %},{% endif %}{% endfor %}/
+notify_nova_on_port_status_changes = true
+notify_nova_on_port_data_changes = true
+l3_ha = {{ neutron_enable_l3_ha | bool | lower }}
+max_l3_agents_per_router = {{ neutron_max_l3_agents_per_router }}
+min_l3_agents_per_router = {{ neutron_min_l3_agents_per_router }}
+dhcp_agents_per_network = {{ neutron_dhcp_agents_per_network }}
+
+[agent]
+root_helper = sudo /usr/bin/neutron-rootwrap /etc/neutron/rootwrap.conf
+
+[database]
+connection = mysql+pymysql://{{ neutron_database_user }}:{{ neutron_db_password }}@{{ db_host }}/{{ neutron_database_name }}
+
+#[keystone_authtoken]
+#www_authenticate_uri = {{ service_endpoints.keystone | regex_replace('/v3$', '') }}
+#auth_url = {{ service_endpoints.keystone }}
+#memcached_servers = {{ memcached_servers }}
+#auth_type = password
+#project_domain_name = {{ openstack_domain }}
+#user_domain_name = {{ openstack_domain }}
+#project_name = service
+#username = neutron
+#password = {{ neutron_service_password }}
+
+[keystone_authtoken]
+www_authenticate_uri = http://openstack-api.internal:5000
+auth_url = http://openstack-api.internal:5000/v3
+memcached_servers = {{ groups['controllers'] | map('extract', hostvars, 'management_ip') | map('regex_replace', '$', ':11211') | join(',') }}
+auth_type = password
+project_domain_name = {{ openstack_domain }}
+user_domain_name = {{ openstack_domain }}
+project_name = service
+username = {{ neutron_service_user }}
+password = {{ neutron_service_password }}
+
+[nova]
+auth_url = {{ service_endpoints.keystone }}
+auth_type = password
+project_domain_name = {{ openstack_domain }}
+user_domain_name = {{ openstack_domain }}
+region_name = {{ openstack_region }}
+project_name = service
+username = nova
+password = {{ nova_service_password }}
+
+[oslo_concurrency]
+lock_path = /var/lib/neutron/tmp

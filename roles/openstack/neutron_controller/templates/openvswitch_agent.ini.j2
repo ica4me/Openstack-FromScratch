@@ -1,0 +1,14 @@
+# Managed by Ansible - Neutron OVS agent config
+
+[ovs]
+bridge_mappings = {{ neutron_bridge_mappings | join(',') }}
+local_ip = {{ neutron_local_ip }}
+
+[agent]
+tunnel_types = {{ neutron_tunnel_types | join(',') }}
+l2_population = true
+prevent_arp_spoofing = true
+
+[securitygroup]
+enable_security_group = true
+firewall_driver = openvswitch

@@ -1,0 +1,263 @@
+---
+- name: Assert Neutron controller variables exist
+  ansible.builtin.assert:
+    that:
+      - neutron_db_password is defined
+      - neutron_service_password is defined
+      - neutron_metadata_secret is defined
+      - nova_service_password is defined
+      - db_host is defined
+      - service_endpoints.neutron is defined
+      - neutron_external_bridge is defined
+      - neutron_bridge_mappings is defined
+      - neutron_local_ip is defined
+    fail_msg: "Variabel Neutron controller belum lengkap."
+
+- name: Install Neutron controller packages
+  ansible.builtin.apt:
+    name: "{{ neutron_packages_controller }}"
+    state: present
+    update_cache: true
+
+- name: Ensure Neutron database exists on bootstrap controller
+  community.mysql.mysql_db:
+    name: "{{ neutron_database_name }}"
+    state: present
+    login_user: root
+    login_password: "{{ vault_mysql_root_password }}"
+    login_host: localhost
+    login_unix_socket: /run/mysqld/mysqld.sock
+  when: inventory_hostname == groups['controllers'][0]
+  no_log: false
+
+- name: Ensure Neutron database user exists on bootstrap controller
+  community.mysql.mysql_user:
+    name: "{{ neutron_database_user }}"
+    password: "{{ neutron_db_password }}"
+    host: "%"
+    priv: "{{ neutron_database_name }}.*:ALL"
+    state: present
+    login_user: root
+    login_password: "{{ vault_mysql_root_password }}"
+    login_host: localhost
+    login_unix_socket: /run/mysqld/mysqld.sock
+  when: inventory_hostname == groups['controllers'][0]
+  no_log: false
+
+- name: Check Neutron service user
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack user show neutron -f value -c id
+  register: neutron_user_check
+  changed_when: false
+  failed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Create Neutron service user
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack user create --domain {{ openstack_domain }} --password '{{ neutron_service_password }}' neutron
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - neutron_user_check.rc != 0
+  no_log: false
+
+- name: Assign admin role to Neutron service user
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack role add --project service --user neutron admin
+  register: neutron_role_add
+  changed_when: neutron_role_add.rc == 0
+  failed_when: neutron_role_add.rc != 0
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Check Neutron service
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack service show {{ neutron_service_name }} -f value -c id
+  register: neutron_service_check
+  changed_when: false
+  failed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Create Neutron service
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack service create --name {{ neutron_service_name }} --description "{{ neutron_service_description }}" {{ neutron_service_type }}
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - neutron_service_check.rc != 0
+
+- name: Ensure Neutron endpoints exist
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack endpoint list --service {{ neutron_service_name }} --interface {{ item }} --region {{ openstack_region }} -f value -c ID | grep -q . || \
+    openstack endpoint create --region {{ openstack_region }} {{ neutron_service_name }} {{ item }} {{ service_endpoints.neutron }}
+  loop:
+    - public
+    - internal
+    - admin
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Deploy neutron.conf
+  ansible.builtin.template:
+    src: neutron.conf.j2
+    dest: "{{ neutron_conf_path }}"
+    owner: root
+    group: neutron
+    mode: "0640"
+    backup: true
+  no_log: false
+
+- name: Deploy ML2 config
+  ansible.builtin.template:
+    src: ml2_conf.ini.j2
+    dest: "{{ neutron_ml2_conf_path }}"
+    owner: root
+    group: neutron
+    mode: "0640"
+    backup: true
+
+- name: Deploy OVS agent config
+  ansible.builtin.template:
+    src: openvswitch_agent.ini.j2
+    dest: "{{ neutron_ovs_agent_conf_path }}"
+    owner: root
+    group: neutron
+    mode: "0640"
+    backup: true
+
+- name: Deploy L3 agent config
+  ansible.builtin.template:
+    src: l3_agent.ini.j2
+    dest: "{{ neutron_l3_agent_conf_path }}"
+    owner: root
+    group: neutron
+    mode: "0640"
+    backup: true
+
+- name: Deploy DHCP agent config
+  ansible.builtin.template:
+    src: dhcp_agent.ini.j2
+    dest: "{{ neutron_dhcp_agent_conf_path }}"
+    owner: root
+    group: neutron
+    mode: "0640"
+    backup: true
+
+- name: Deploy metadata agent config
+  ansible.builtin.template:
+    src: metadata_agent.ini.j2
+    dest: "{{ neutron_metadata_agent_conf_path }}"
+    owner: root
+    group: neutron
+    mode: "0640"
+    backup: true
+  no_log: false
+
+- name: Ensure neutron plugin.ini points to ML2 config
+  ansible.builtin.file:
+    src: "{{ neutron_ml2_conf_path }}"
+    dest: /etc/neutron/plugin.ini
+    state: link
+    force: true
+
+- name: Ensure br-ex exists
+  ansible.builtin.command: "ovs-vsctl br-exists {{ neutron_external_bridge }}"
+  register: neutron_br_ex_check
+  failed_when: false
+  changed_when: false
+
+- name: Create br-ex when missing
+  ansible.builtin.command: "ovs-vsctl add-br {{ neutron_external_bridge }}"
+  when: neutron_br_ex_check.rc != 0
+
+- name: Check br-ex ports
+  ansible.builtin.command: "ovs-vsctl list-ports {{ neutron_external_bridge }}"
+  register: neutron_br_ex_ports
+  changed_when: false
+
+- name: Attach provider interface to br-ex
+  ansible.builtin.command: "ovs-vsctl add-port {{ neutron_external_bridge }} {{ provider_iface }}"
+  when: provider_iface not in neutron_br_ex_ports.stdout_lines
+
+- name: Check Neutron DB sync marker
+  ansible.builtin.stat:
+    path: "{{ neutron_db_sync_marker }}"
+  register: neutron_db_sync_marker_stat
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Populate Neutron database
+  ansible.builtin.command: neutron-db-manage --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade head
+  become_user: neutron
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - not neutron_db_sync_marker_stat.stat.exists
+
+- name: Create Neutron DB sync marker
+  ansible.builtin.file:
+    path: "{{ neutron_db_sync_marker }}"
+    state: touch
+    owner: neutron
+    group: neutron
+    mode: "0600"
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - not neutron_db_sync_marker_stat.stat.exists
+
+- name: Configure Nova to use Neutron
+  ansible.builtin.blockinfile:
+    path: /etc/nova/nova.conf
+    marker: "# {mark} ANSIBLE MANAGED NEUTRON INTEGRATION"
+    block: |
+      [neutron]
+      auth_url = {{ service_endpoints.keystone }}
+      auth_type = password
+      project_domain_name = {{ openstack_domain }}
+      user_domain_name = {{ openstack_domain }}
+      region_name = {{ openstack_region }}
+      project_name = service
+      username = neutron
+      password = {{ neutron_service_password }}
+      service_metadata_proxy = true
+      metadata_proxy_shared_secret = {{ neutron_metadata_secret }}
+    backup: true
+  no_log: false
+
+- name: Restart Nova API after Neutron integration
+  ansible.builtin.service:
+    name: nova-api
+    state: restarted
+    enabled: true
+
+- name: Restart Neutron controller services
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: restarted
+    enabled: true
+  loop: "{{ neutron_services_controller }}"
+
+- name: Wait for Neutron API port
+  ansible.builtin.wait_for:
+    host: "{{ management_ip }}"
+    port: 9696
+    timeout: 90
+
+- name: Validate Neutron API locally
+  ansible.builtin.uri:
+    url: "http://{{ management_ip }}:9696"
+    method: GET
+    status_code:
+      - 200
+      - 300
+      - 401
+    timeout: 10
+
+- name: Print Neutron controller summary
+  ansible.builtin.debug:
+    msg:
+      - "Neutron controller configured on {{ inventory_hostname }}"
+      - "API: http://{{ management_ip }}:9696"
+      - "Provider bridge: {{ neutron_external_bridge }}"
+      - "Bridge mappings: {{ neutron_bridge_mappings | join(',') }}"
+      - "VXLAN local IP: {{ neutron_local_ip }}"

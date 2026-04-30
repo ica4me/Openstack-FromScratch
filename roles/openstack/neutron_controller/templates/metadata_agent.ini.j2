@@ -1,0 +1,6 @@
+# Managed by Ansible - Neutron metadata agent config
+
+[DEFAULT]
+nova_metadata_host = {{ vip_internal }}
+nova_metadata_port = 8775
+metadata_proxy_shared_secret = {{ neutron_metadata_secret }}

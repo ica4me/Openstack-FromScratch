@@ -1,0 +1,98 @@
+---
+- name: Assert Neutron compute variables exist
+  ansible.builtin.assert:
+    that:
+      - neutron_service_password is defined
+      - service_endpoints.keystone is defined
+      - memcached_servers is defined
+      - neutron_external_bridge is defined
+      - neutron_bridge_mappings is defined
+      - neutron_local_ip is defined
+      - provider_iface is defined
+    fail_msg: "Variabel Neutron compute belum lengkap."
+
+- name: Install Neutron compute packages
+  ansible.builtin.apt:
+    name: "{{ neutron_packages_compute }}"
+    state: present
+    update_cache: true
+
+- name: Deploy neutron.conf on compute
+  ansible.builtin.template:
+    src: neutron.conf.j2
+    dest: "{{ neutron_conf_path }}"
+    owner: root
+    group: neutron
+    mode: "0640"
+    backup: true
+  no_log: true
+
+- name: Deploy OVS agent config on compute
+  ansible.builtin.template:
+    src: openvswitch_agent.ini.j2
+    dest: "{{ neutron_ovs_agent_conf_path }}"
+    owner: root
+    group: neutron
+    mode: "0640"
+    backup: true
+
+- name: Ensure br-ex exists
+  ansible.builtin.command: "ovs-vsctl br-exists {{ neutron_external_bridge }}"
+  register: neutron_compute_br_ex_check
+  failed_when: false
+  changed_when: false
+
+- name: Create br-ex when missing
+  ansible.builtin.command: "ovs-vsctl add-br {{ neutron_external_bridge }}"
+  when: neutron_compute_br_ex_check.rc != 0
+
+- name: Check br-ex ports
+  ansible.builtin.command: "ovs-vsctl list-ports {{ neutron_external_bridge }}"
+  register: neutron_compute_br_ex_ports
+  changed_when: false
+
+- name: Attach provider interface to br-ex
+  ansible.builtin.command: "ovs-vsctl add-port {{ neutron_external_bridge }} {{ provider_iface }}"
+  when: provider_iface not in neutron_compute_br_ex_ports.stdout_lines
+
+- name: Configure Nova compute to use Neutron
+  ansible.builtin.blockinfile:
+    path: /etc/nova/nova.conf
+    marker: "# {mark} ANSIBLE MANAGED NEUTRON COMPUTE INTEGRATION"
+    block: |
+      [neutron]
+      auth_url = {{ service_endpoints.keystone }}
+      auth_type = password
+      project_domain_name = {{ openstack_domain }}
+      user_domain_name = {{ openstack_domain }}
+      region_name = {{ openstack_region }}
+      project_name = service
+      username = neutron
+      password = {{ neutron_service_password }}
+    backup: true
+  no_log: true
+
+- name: Restart Nova compute after Neutron integration
+  ansible.builtin.service:
+    name: nova-compute
+    state: restarted
+    enabled: true
+
+- name: Restart Neutron compute services
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: restarted
+    enabled: true
+  loop: "{{ neutron_services_compute }}"
+
+- name: Validate OVS agent is active
+  ansible.builtin.command: systemctl is-active neutron-openvswitch-agent
+  changed_when: false
+
+- name: Print Neutron compute summary
+  ansible.builtin.debug:
+    msg:
+      - "Neutron compute configured on {{ inventory_hostname }}"
+      - "Provider bridge: {{ neutron_external_bridge }}"
+      - "Bridge mappings: {{ neutron_bridge_mappings | join(',') }}"
+      - "VXLAN local IP: {{ neutron_local_ip }}"

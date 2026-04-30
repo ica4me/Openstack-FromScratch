@@ -24,19 +24,40 @@ haproxy_stats_uri: /stats
 # Backend awal. Beberapa service belum aktif di fase ini, jadi health check dibuat tcp.
 # Nanti setelah service dipasang, backend akan mulai UP otomatis.
 haproxy_openstack_services:
+
+#  - name: keystone_public
+#    bind_ip: "{{ vip_internal }}"
+#    bind_port: 5000
+#    backend_port: 5000
+#    mode: http
+#    check_type: tcp
+
   - name: keystone_public
     bind_ip: "{{ vip_internal }}"
     bind_port: 5000
     backend_port: 5000
     mode: http
-    check_type: tcp
+    httpchk:
+      method: GET
+      uri: /v3
+      expect_status: 200
+
+#  - name: glance_api
+#    bind_ip: "{{ vip_internal }}"
+#    bind_port: 9292
+#    backend_port: 9292
+#    mode: http
+#    check_type: tcp
 
   - name: glance_api
     bind_ip: "{{ vip_internal }}"
     bind_port: 9292
     backend_port: 9292
     mode: http
-    check_type: tcp
+    httpchk:
+      method: GET
+      uri: /
+      expect_status: 300
 
 #  - name: placement_api
 #    bind_ip: "{{ vip_internal }}"
@@ -44,6 +65,16 @@ haproxy_openstack_services:
 #    backend_port: 8778
 #    mode: http
 #    check_type: tcp
+#  - name: placement_api
+#    bind_ip: "{{ vip_internal }}"
+#    bind_port: 8778
+#    backend_port: 8778
+#    mode: http
+#    httpchk:
+#      method: GET
+#      uri: /
+#      expect_status: 200
+
   - name: placement_api
     bind_ip: "{{ vip_internal }}"
     bind_port: 8778
@@ -54,19 +85,29 @@ haproxy_openstack_services:
       uri: /
       expect_status: 200
 
+#  - name: nova_api
+#    bind_ip: "{{ vip_internal }}"
+#    bind_port: 8774
+#    backend_port: 8774
+#    mode: http
+#    check_type: tcp
+
   - name: nova_api
     bind_ip: "{{ vip_internal }}"
     bind_port: 8774
     backend_port: 8774
     mode: http
-    check_type: tcp
+    httpchk:
+      method: GET
+      uri: /
+      expect_status: 200
 
-  - name: neutron_api
-    bind_ip: "{{ vip_internal }}"
-    bind_port: 9696
-    backend_port: 9696
-    mode: http
-    check_type: tcp
+ # - name: neutron_api
+ #   bind_ip: "{{ vip_internal }}"
+ #   bind_port: 9696
+ #   backend_port: 9696
+ #   mode: http
+ #   check_type: tcp
 
   - name: cinder_api
     bind_ip: "{{ vip_internal }}"
@@ -81,6 +122,16 @@ haproxy_openstack_services:
     backend_port: 80
     mode: http
     check_type: tcp
+
+  - name: neutron_api
+    bind_ip: "{{ vip_internal }}"
+    bind_port: 9696
+    backend_port: 9696
+    mode: http
+    httpchk:
+      method: GET
+      uri: /
+      expect_status: 200
 
 # MariaDB Galera
 mariadb_bind_address: "0.0.0.0"
