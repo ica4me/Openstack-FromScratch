@@ -1,0 +1,14 @@
+---
+nova_compute_packages:
+  - nova-compute
+  - qemu-kvm
+  - libvirt-daemon-system
+  - libvirt-clients
+  - bridge-utils
+  - ceph-common
+  - python3-rbd
+  - python3-rados
+  - python3-pymysql
+
+nova_conf_path: /etc/nova/nova.conf
+nova_libvirt_secret_xml: /etc/nova/secret.xml

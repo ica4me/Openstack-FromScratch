@@ -1,0 +1,90 @@
+---
+- name: Phase 09 - Nova Controller
+  hosts: controllers
+  become: true
+  gather_facts: true
+  serial: 1
+
+  roles:
+    - role: openstack/nova_controller
+
+  post_tasks:
+    - name: Check Nova controller services
+      ansible.builtin.shell: |
+        set -e
+        systemctl is-active nova-api
+        systemctl is-active nova-scheduler
+        systemctl is-active nova-conductor
+        systemctl is-active nova-novncproxy
+      changed_when: false
+
+- name: Phase 09 - Nova Compute
+  hosts: computes
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: openstack/nova_compute
+
+  post_tasks:
+    - name: Check Nova compute service
+      ansible.builtin.shell: |
+        set -e
+        systemctl is-active libvirtd
+        systemctl is-active nova-compute
+      changed_when: false
+
+- name: Phase 09 - Discover Nova compute hosts and validate
+  hosts: controllers
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Discover compute hosts in cell
+      ansible.builtin.command: nova-manage cell_v2 discover_hosts --verbose
+      changed_when: false
+      failed_when: false
+      run_once: true
+      delegate_to: "{{ groups['controllers'][0] }}"
+
+    - name: Validate Nova API through VIP
+      ansible.builtin.uri:
+        url: "http://{{ internal_fqdn }}:8774/"
+        method: GET
+        status_code:
+          - 200
+          - 300
+          - 401
+      run_once: true
+      delegate_to: "{{ groups['controllers'][0] }}"
+
+    - name: Validate Nova service catalog
+      ansible.builtin.shell: |
+        set -e
+        . /root/admin-openrc
+        openstack service show compute
+        openstack endpoint list --service nova
+        openstack compute service list
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ groups['controllers'][0] }}"
+
+    - name: Validate Nova hypervisor list
+      ansible.builtin.shell: |
+        set -e
+        . /root/admin-openrc
+        openstack hypervisor list
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ groups['controllers'][0] }}"
+
+    - name: Print Nova phase summary
+      ansible.builtin.debug:
+        msg:
+          - "Nova phase completed."
+          - "Compute API endpoint: {{ nova_public_endpoint }}"
+          - "VNC endpoint: {{ nova_novncproxy_base_url }}"
+          - "Libvirt virt_type: {{ nova_virt_type }}"
+          - "Libvirt cpu_mode: {{ nova_cpu_mode }}"
+          - "Nova RBD pool: {{ nova_rbd_pool }}"
+      run_once: true

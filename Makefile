@@ -60,3 +60,6 @@ keystone:
 
 image-placement:
 	ansible-playbook -i inventories/lab-5node/hosts.yml playbooks/08-image-placement.yml
+
+nova:
+	ansible-playbook -i inventories/lab-5node/hosts.yml playbooks/09-nova.yml

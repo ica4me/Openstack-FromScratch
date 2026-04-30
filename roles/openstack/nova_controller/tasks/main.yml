@@ -1,0 +1,328 @@
+---
+- name: Build Nova RabbitMQ transport URL
+  ansible.builtin.set_fact:
+    nova_transport_url: >-
+      rabbit://{{
+        groups['controllers']
+        | map('extract', hostvars, 'management_ip')
+        | map('regex_replace', '^(.*)$', rabbitmq_openstack_user ~ ':' ~ rabbitmq_openstack_password ~ '@\1:' ~ (nova_rabbit_port | default(5672) | string))
+        | join(',')
+      }}/
+  no_log: true
+
+- name: Debug Nova transport URL redacted
+  ansible.builtin.debug:
+    msg: "{{ nova_transport_url | regex_replace('://[^:]+:[^@]+@', '://USER:PASS@') }}"
+
+- name: Assert Nova controller variables exist
+  ansible.builtin.assert:
+    that:
+      - nova_api_db_name is defined
+      - nova_db_name is defined
+      - nova_cell0_db_name is defined
+      - nova_api_database_connection is defined
+      - nova_database_connection is defined
+      - nova_cell0_database_connection is defined
+      - nova_service_user is defined
+      - nova_service_password is defined
+      - nova_transport_url is defined
+      - placement_service_user is defined
+      - placement_service_password is defined
+      - internal_fqdn is defined
+      - management_ip is defined
+    fail_msg: "Variabel Nova controller belum lengkap."
+
+- name: Install Nova controller packages
+  ansible.builtin.apt:
+    name: "{{ nova_controller_packages }}"
+    state: present
+    update_cache: true
+
+- name: Ensure Nova API database exists
+  community.mysql.mysql_db:
+    name: "{{ nova_api_db_name }}"
+    state: present
+    encoding: utf8
+    collation: utf8_general_ci
+    config_file: /root/.my.cnf
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Ensure Nova main database exists
+  community.mysql.mysql_db:
+    name: "{{ nova_db_name }}"
+    state: present
+    encoding: utf8
+    collation: utf8_general_ci
+    config_file: /root/.my.cnf
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Ensure Nova cell0 database exists
+  community.mysql.mysql_db:
+    name: "{{ nova_cell0_db_name }}"
+    state: present
+    encoding: utf8
+    collation: utf8_general_ci
+    config_file: /root/.my.cnf
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Ensure Nova API database user exists
+  community.mysql.mysql_user:
+    name: "{{ nova_api_db_user }}"
+    password: "{{ nova_api_db_password }}"
+    host: "%"
+    priv: "{{ nova_api_db_name }}.*:ALL"
+    state: present
+    config_file: /root/.my.cnf
+  no_log: true
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Ensure Nova main database user exists
+  community.mysql.mysql_user:
+    name: "{{ nova_db_user }}"
+    password: "{{ nova_db_password }}"
+    host: "%"
+    priv: "{{ nova_db_name }}.*:ALL"
+    state: present
+    config_file: /root/.my.cnf
+  no_log: true
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Ensure Nova cell0 database user exists
+  community.mysql.mysql_user:
+    name: "{{ nova_cell0_db_user }}"
+    password: "{{ nova_cell0_db_password }}"
+    host: "%"
+    priv: "{{ nova_cell0_db_name }}.*:ALL"
+    state: present
+    config_file: /root/.my.cnf
+  no_log: true
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Ensure service project exists
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack project show {{ keystone_service_project }} >/dev/null 2>&1 || \
+    openstack project create --domain {{ keystone_default_domain }} \
+      --description "Service Project" {{ keystone_service_project }}
+  changed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Check Nova service user
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack user show {{ nova_service_user }} -f value -c id
+  register: nova_user_check
+  changed_when: false
+  failed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Create Nova service user
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack user create --domain {{ keystone_default_domain }} --password '{{ nova_service_password }}' {{ nova_service_user }}
+  no_log: true
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - nova_user_check.rc != 0
+
+- name: Assign admin role to Nova service user
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack role add --project {{ keystone_service_project }} --user {{ nova_service_user }} admin
+  changed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Check Nova service catalog entry
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack service show {{ nova_service_type }} -f value -c id
+  register: nova_service_check
+  changed_when: false
+  failed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Create Nova service catalog entry
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack service create --name {{ nova_service_name }} --description "{{ nova_service_description }}" {{ nova_service_type }}
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - nova_service_check.rc != 0
+
+- name: Check Nova endpoint count
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack endpoint list --service {{ nova_service_name }} -f value -c ID | wc -l
+  register: nova_endpoint_count
+  changed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Create Nova public endpoint
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack endpoint create --region {{ keystone_region }} {{ nova_service_type }} public {{ nova_public_endpoint }}
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - nova_endpoint_count.stdout | int == 0
+
+- name: Create Nova internal endpoint
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack endpoint create --region {{ keystone_region }} {{ nova_service_type }} internal {{ nova_internal_endpoint }}
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - nova_endpoint_count.stdout | int == 0
+
+- name: Create Nova admin endpoint
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack endpoint create --region {{ keystone_region }} {{ nova_service_type }} admin {{ nova_admin_endpoint }}
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - nova_endpoint_count.stdout | int == 0
+
+- name: Deploy nova.conf on controllers
+  ansible.builtin.template:
+    src: nova.conf.j2
+    dest: "{{ nova_conf_path }}"
+    owner: root
+    group: nova
+    mode: "0640"
+    backup: true
+
+- name: Ensure Nova lock directory exists
+  ansible.builtin.file:
+    path: /var/lib/nova/tmp
+    state: directory
+    owner: nova
+    group: nova
+    mode: "0755"
+
+- name: Check Nova API DB sync marker
+  ansible.builtin.stat:
+    path: "{{ nova_api_db_sync_marker }}"
+  register: nova_api_db_sync_marker_stat
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Ensure Ansible remote tmp exists for nova user
+  ansible.builtin.file:
+    path: /var/lib/nova/.ansible/tmp
+    state: directory
+    owner: nova
+    group: nova
+    mode: "0700"
+
+- name: Sync Nova API database
+  ansible.builtin.command: nova-manage api_db sync
+  become_user: nova
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - not nova_api_db_sync_marker_stat.stat.exists
+
+- name: Create Nova API DB sync marker
+  ansible.builtin.file:
+    path: "{{ nova_api_db_sync_marker }}"
+    state: touch
+    owner: nova
+    group: nova
+    mode: "0600"
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - not nova_api_db_sync_marker_stat.stat.exists
+
+- name: Check Nova cell0 marker
+  ansible.builtin.stat:
+    path: "{{ nova_cell0_marker }}"
+  register: nova_cell0_marker_stat
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Map Nova cell0
+  ansible.builtin.command: nova-manage cell_v2 map_cell0 --database_connection {{ nova_cell0_database_connection }}
+  become_user: nova
+  no_log: true
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - not nova_cell0_marker_stat.stat.exists
+
+- name: Create Nova cell0 marker
+  ansible.builtin.file:
+    path: "{{ nova_cell0_marker }}"
+    state: touch
+    owner: nova
+    group: nova
+    mode: "0600"
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - not nova_cell0_marker_stat.stat.exists
+
+- name: Check Nova cell1 marker
+  ansible.builtin.stat:
+    path: "{{ nova_cell1_marker }}"
+  register: nova_cell1_marker_stat
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Create Nova cell1
+  ansible.builtin.command: nova-manage cell_v2 create_cell --name=cell1 --database_connection {{ nova_database_connection }} --transport-url {{ nova_transport_url }}
+  become_user: nova
+  no_log: true
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - not nova_cell1_marker_stat.stat.exists
+
+- name: Create Nova cell1 marker
+  ansible.builtin.file:
+    path: "{{ nova_cell1_marker }}"
+    state: touch
+    owner: nova
+    group: nova
+    mode: "0600"
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - not nova_cell1_marker_stat.stat.exists
+
+- name: Check Nova main DB sync marker
+  ansible.builtin.stat:
+    path: "{{ nova_db_sync_marker }}"
+  register: nova_db_sync_marker_stat
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Sync Nova main database
+  ansible.builtin.command: nova-manage db sync
+  become_user: nova
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - not nova_db_sync_marker_stat.stat.exists
+
+- name: Create Nova main DB sync marker
+  ansible.builtin.file:
+    path: "{{ nova_db_sync_marker }}"
+    state: touch
+    owner: nova
+    group: nova
+    mode: "0600"
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - not nova_db_sync_marker_stat.stat.exists
+
+- name: Restart Nova controller services
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: restarted
+    enabled: true
+  loop:
+    - nova-api
+    - nova-scheduler
+    - nova-conductor
+    - nova-novncproxy
+
+- name: Wait for Nova API port
+  ansible.builtin.wait_for:
+    host: "{{ management_ip }}"
+    port: "{{ nova_api_port }}"
+    timeout: 60
+
+- name: Wait for Nova NoVNC proxy port
+  ansible.builtin.wait_for:
+    host: "{{ management_ip }}"
+    port: "{{ nova_vncproxy_port }}"
+    timeout: 60

@@ -1,0 +1,71 @@
+# Managed by Ansible - Nova Compute Caracal
+
+[DEFAULT]
+debug = false
+my_ip = {{ management_ip }}
+state_path = {{ nova_state_path }}
+transport_url = {{ nova_transport_url }}
+compute_driver = {{ nova_compute_driver }}
+use_neutron = true
+firewall_driver = nova.virt.firewall.NoopFirewallDriver
+
+[api]
+auth_strategy = keystone
+
+[keystone_authtoken]
+www_authenticate_uri = http://{{ internal_fqdn }}:5000
+auth_url = http://{{ internal_fqdn }}:5000
+memcached_servers = {{ nova_memcached_servers }}
+auth_type = password
+project_domain_name = {{ keystone_default_domain }}
+user_domain_name = {{ keystone_default_domain }}
+project_name = {{ keystone_service_project }}
+username = {{ nova_service_user }}
+password = {{ nova_service_password }}
+
+[service_user]
+send_service_user_token = true
+auth_url = http://{{ internal_fqdn }}:5000
+auth_strategy = keystone
+auth_type = password
+project_domain_name = {{ keystone_default_domain }}
+project_name = {{ keystone_service_project }}
+user_domain_name = {{ keystone_default_domain }}
+username = {{ nova_service_user }}
+password = {{ nova_service_password }}
+
+[placement]
+auth_url = {{ nova_placement_auth_url }}
+os_region_name = {{ keystone_region }}
+auth_type = password
+project_domain_name = {{ keystone_default_domain }}
+user_domain_name = {{ keystone_default_domain }}
+project_name = {{ keystone_service_project }}
+username = {{ placement_service_user }}
+password = {{ placement_service_password }}
+
+[vnc]
+enabled = true
+server_listen = 0.0.0.0
+server_proxyclient_address = {{ management_ip }}
+novncproxy_base_url = {{ nova_novncproxy_base_url }}
+
+[glance]
+api_servers = {{ nova_glance_api_servers }}
+
+[oslo_concurrency]
+lock_path = /var/lib/nova/tmp
+
+[libvirt]
+virt_type = {{ nova_virt_type }}
+cpu_mode = {{ nova_cpu_mode }}
+images_type = {{ nova_images_type }}
+images_rbd_pool = {{ nova_rbd_pool }}
+images_rbd_ceph_conf = /etc/ceph/ceph.conf
+rbd_user = {{ nova_rbd_user }}
+rbd_secret_uuid = {{ nova_rbd_secret_uuid }}
+disk_cachemodes = "network=writeback"
+inject_password = false
+inject_key = false
+inject_partition = -2
+live_migration_uri = qemu+tcp://%s/system

@@ -1,0 +1,15 @@
+---
+nova_controller_packages:
+  - nova-api
+  - nova-conductor
+  - nova-novncproxy
+  - nova-scheduler
+  - python3-openstackclient
+  - python3-pymysql
+
+nova_conf_path: /etc/nova/nova.conf
+
+nova_api_db_sync_marker: /var/lib/nova/.api_db_synced
+nova_db_sync_marker: /var/lib/nova/.db_synced
+nova_cell0_marker: /var/lib/nova/.cell0_mapped
+nova_cell1_marker: /var/lib/nova/.cell1_created

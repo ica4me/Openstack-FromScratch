@@ -1,0 +1,157 @@
+---
+- name: Build Nova RabbitMQ transport URL
+  ansible.builtin.set_fact:
+    nova_transport_url: >-
+      rabbit://{{
+        groups['controllers']
+        | map('extract', hostvars, 'management_ip')
+        | map('regex_replace', '^(.*)$', rabbitmq_openstack_user ~ ':' ~ rabbitmq_openstack_password ~ '@\1:' ~ (nova_rabbit_port | default(5672) | string))
+        | join(',')
+      }}/
+  no_log: false
+
+- name: Debug Nova transport URL redacted
+  ansible.builtin.debug:
+    msg: "{{ nova_transport_url | regex_replace('://[^:]+:[^@]+@', '://USER:PASS@') }}"
+
+- name: Assert Nova compute variables exist
+  ansible.builtin.assert:
+    that:
+      - nova_service_user is defined
+      - nova_service_password is defined
+      - nova_transport_url is defined
+      - placement_service_user is defined
+      - placement_service_password is defined
+      - internal_fqdn is defined
+      - management_ip is defined
+      - nova_virt_type is defined
+      - nova_cpu_mode is defined
+      - nova_rbd_pool is defined
+      - nova_rbd_user is defined
+      - nova_rbd_secret_uuid is defined
+    fail_msg: "Variabel Nova compute belum lengkap."
+- name: Install Nova compute packages
+  ansible.builtin.apt:
+    name: "{{ nova_compute_packages }}"
+    state: present
+    update_cache: true
+
+- name: Ensure libvirt service is enabled and started
+  ansible.builtin.service:
+    name: libvirtd
+    state: started
+    enabled: true
+
+- name: Ensure Nova can read Ceph nova keyring
+  ansible.builtin.file:
+    path: /etc/ceph/ceph.client.nova.keyring
+    owner: root
+    group: nova
+    mode: "0640"
+
+- name: Ensure libvirt-qemu can access Ceph config directory
+  ansible.builtin.file:
+    path: /etc/ceph
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy libvirt Ceph secret XML
+  ansible.builtin.template:
+    src: libvirt-secret.xml.j2
+    dest: "{{ nova_libvirt_secret_xml }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Check libvirt Ceph secret
+  ansible.builtin.command: "virsh secret-dumpxml {{ nova_rbd_secret_uuid }}"
+  register: nova_libvirt_secret_check
+  changed_when: false
+  failed_when: false
+
+- name: Define libvirt Ceph secret
+  ansible.builtin.command: "virsh secret-define --file {{ nova_libvirt_secret_xml }}"
+  when: nova_libvirt_secret_check.rc != 0
+
+#- name: Read Ceph client.nova key
+#  ansible.builtin.command: "ceph-authtool -p /etc/ceph/ceph.client.nova.keyring"
+#  register: nova_ceph_key
+#  changed_when: false
+#  no_log: false
+
+#- name: Read Ceph client.nova key
+#  ansible.builtin.command: "ceph-authtool -p /etc/ceph/ceph.client.nova.keyring"
+#  register: nova_ceph_key
+#  changed_when: false
+#  no_log: false
+
+- name: Read Ceph client.nova key
+  ansible.builtin.shell: |
+    set -euo pipefail
+    awk -F'= ' '
+      /^\[client\.{{ nova_rbd_user }}\]/ {found=1}
+      found && /^[[:space:]]*key[[:space:]]*=/ {print $2; exit}
+    ' /etc/ceph/ceph.client.{{ nova_rbd_user }}.keyring
+  args:
+    executable: /bin/bash
+  register: nova_ceph_key
+  changed_when: false
+  no_log: false
+
+- name: Assert Ceph client.nova key was read
+  ansible.builtin.assert:
+    that:
+      - nova_ceph_key.stdout is defined
+      - nova_ceph_key.stdout | length > 20
+    fail_msg: "Gagal membaca key client.nova dari /etc/ceph/ceph.client.nova.keyring"
+  no_log: true
+
+- name: Set libvirt Ceph secret value
+  ansible.builtin.command: "virsh secret-set-value --secret {{ nova_rbd_secret_uuid }} --base64 {{ nova_ceph_key.stdout }}"
+  no_log: false
+
+- name: Ensure Nova lock directory exists
+  ansible.builtin.file:
+    path: /var/lib/nova/tmp
+    state: directory
+    owner: nova
+    group: nova
+    mode: "0755"
+
+- name: Ensure Nova instances directory exists
+  ansible.builtin.file:
+    path: "{{ nova_instances_path }}"
+    state: directory
+    owner: nova
+    group: nova
+    mode: "0755"
+
+- name: Deploy nova.conf on compute nodes
+  ansible.builtin.template:
+    src: nova.conf.j2
+    dest: "{{ nova_conf_path }}"
+    owner: root
+    group: nova
+    mode: "0640"
+    backup: true
+
+- name: Restart libvirt
+  ansible.builtin.service:
+    name: libvirtd
+    state: restarted
+    enabled: true
+
+- name: Restart and enable Nova compute
+  ansible.builtin.service:
+    name: nova-compute
+    state: restarted
+    enabled: true
+
+- name: Wait for nova-compute to settle
+  ansible.builtin.pause:
+    seconds: 5
+
+- name: Check nova-compute service
+  ansible.builtin.command: systemctl is-active nova-compute
+  changed_when: false

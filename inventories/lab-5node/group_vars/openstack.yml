@@ -89,3 +89,81 @@ placement_internal_endpoint: "http://{{ internal_fqdn }}:8778"
 placement_admin_endpoint: "http://{{ internal_fqdn }}:8778"
 
 placement_database_connection: "mysql+pymysql://{{ placement_db_user }}:{{ placement_db_password }}@{{ vip_internal }}/{{ placement_db_name }}"
+
+# ============================================================
+# RabbitMQ client credentials for OpenStack services
+# Visible to controllers and computes.
+# ============================================================
+rabbitmq_openstack_user: openstack
+rabbitmq_openstack_password: "{{ vault_rabbitmq_openstack_password }}"
+rabbitmq_openstack_vhost: /
+rabbitmq_port: 5672
+
+# ============================================================
+# Nova / Compute Service
+# ============================================================
+
+nova_service_name: nova
+nova_service_type: compute
+nova_service_description: "OpenStack Compute"
+nova_service_user: nova
+nova_service_password: "{{ vault_nova_service_password }}"
+
+nova_api_port: 8774
+nova_metadata_port: 8775
+nova_vncproxy_port: 6080
+
+nova_public_endpoint: "http://{{ internal_fqdn }}:8774/v2.1"
+nova_internal_endpoint: "http://{{ internal_fqdn }}:8774/v2.1"
+nova_admin_endpoint: "http://{{ internal_fqdn }}:8774/v2.1"
+
+nova_api_db_name: nova_api
+nova_api_db_user: nova_api
+nova_api_db_password: "{{ vault_nova_api_db_password }}"
+
+nova_db_name: nova
+nova_db_user: nova
+nova_db_password: "{{ vault_nova_db_password }}"
+
+nova_cell0_db_name: nova_cell0
+nova_cell0_db_user: nova_cell0
+nova_cell0_db_password: "{{ vault_nova_cell0_db_password }}"
+
+nova_api_database_connection: "mysql+pymysql://{{ nova_api_db_user }}:{{ nova_api_db_password }}@{{ vip_internal }}/{{ nova_api_db_name }}"
+nova_database_connection: "mysql+pymysql://{{ nova_db_user }}:{{ nova_db_password }}@{{ vip_internal }}/{{ nova_db_name }}"
+nova_cell0_database_connection: "mysql+pymysql://{{ nova_cell0_db_user }}:{{ nova_cell0_db_password }}@{{ vip_internal }}/{{ nova_cell0_db_name }}"
+
+#nova_transport_url: "rabbit://{{ rabbitmq_openstack_user }}:{{ rabbitmq_openstack_password }}@{{ groups['controllers'] | map('extract', hostvars, 'management_ip') | join(':5672,') }}:5672/"
+#nova_rabbit_hosts: >-
+#  {{
+#    groups['controllers']
+#    | map('extract', hostvars, 'management_ip')
+#    | map('regex_replace', '^(.*)$', rabbitmq_openstack_user ~ ':' ~ rabbitmq_openstack_password ~ '@\\1:5672')
+#    | join(',')
+#  }}
+#
+#nova_transport_url: "rabbit://{{ nova_rabbit_hosts }}/"
+
+nova_rabbit_port: 5672
+
+nova_memcached_servers: "{{ keystone_memcached_servers }}"
+
+nova_glance_api_servers: "http://{{ internal_fqdn }}:9292"
+nova_placement_auth_url: "http://{{ internal_fqdn }}:5000/v3"
+
+nova_novncproxy_base_url: "http://{{ internal_fqdn }}:6080/vnc_auto.html"
+
+nova_compute_driver: libvirt.LibvirtDriver
+nova_virt_type: kvm
+nova_cpu_mode: host-model
+
+# Nova ephemeral backend via external Ceph RBD
+nova_images_type: rbd
+nova_rbd_pool: "{{ ceph_pools.nova | default('vms') }}"
+nova_rbd_user: nova
+nova_rbd_secret_uuid: "{{ rbd_secret_uuid }}"
+
+nova_state_path: /var/lib/nova
+nova_instances_path: /var/lib/nova/instances
+
+nova_discover_hosts_interval: 300
