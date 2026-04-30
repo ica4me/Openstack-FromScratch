@@ -57,3 +57,6 @@ msgcache:
 
 keystone:
 	ansible-playbook -i inventories/lab-5node/hosts.yml playbooks/07-keystone.yml
+
+image-placement:
+	ansible-playbook -i inventories/lab-5node/hosts.yml playbooks/08-image-placement.yml

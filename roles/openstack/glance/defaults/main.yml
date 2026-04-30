@@ -1,0 +1,13 @@
+---
+glance_packages:
+  - glance
+  - python3-rados
+  - python3-rbd
+  - python3-cephfs
+  - python3-pymysql
+  - python3-openstackclient
+
+glance_service: glance-api
+glance_conf_path: /etc/glance/glance-api.conf
+glance_db_sync_marker: /var/lib/glance/.db_synced
+glance_api_workers: 4

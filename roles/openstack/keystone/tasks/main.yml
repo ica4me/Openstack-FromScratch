@@ -397,6 +397,14 @@
     group: root
     mode: "0600"
   no_log: false
+- name: Ensure OpenStack service project exists
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack project show {{ keystone_service_project }} >/dev/null 2>&1 || \
+    openstack project create --domain {{ keystone_default_domain }} \
+      --description "Service Project" {{ keystone_service_project }}
+  changed_when: false
+  when: inventory_hostname == groups['controllers'][0]
 
 - name: Validate Keystone API locally
   ansible.builtin.uri:

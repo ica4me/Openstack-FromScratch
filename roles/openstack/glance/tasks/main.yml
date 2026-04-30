@@ -1,0 +1,187 @@
+---
+- name: Assert Glance variables exist
+  ansible.builtin.assert:
+    that:
+      - glance_db_name is defined
+      - glance_db_user is defined
+      - glance_db_password is defined
+      - glance_service_user is defined
+      - glance_service_password is defined
+      - glance_database_connection is defined
+      - glance_api_bind_host is defined
+      - glance_api_port is defined
+      - glance_rbd_store_pool is defined
+      - glance_rbd_store_user is defined
+      - internal_fqdn is defined
+      - keystone_memcached_servers is defined
+    fail_msg: "Variabel Glance belum lengkap."
+
+- name: Install Glance packages
+  ansible.builtin.apt:
+    name: "{{ glance_packages }}"
+    state: present
+    update_cache: true
+
+- name: Ensure Glance database exists on bootstrap controller
+  community.mysql.mysql_db:
+    name: "{{ glance_db_name }}"
+    state: present
+    encoding: utf8
+    collation: utf8_general_ci
+    config_file: /root/.my.cnf
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Ensure Glance database user exists on bootstrap controller
+  community.mysql.mysql_user:
+    name: "{{ glance_db_user }}"
+    password: "{{ glance_db_password }}"
+    host: "%"
+    priv: "{{ glance_db_name }}.*:ALL"
+    state: present
+    config_file: /root/.my.cnf
+  no_log: true
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Ensure service project exists
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack project show {{ keystone_service_project }} >/dev/null 2>&1 || \
+    openstack project create --domain {{ keystone_default_domain }} \
+      --description "Service Project" {{ keystone_service_project }}
+  changed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Check Glance service user
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack user show {{ glance_service_user }} -f value -c id
+  register: glance_user_check
+  changed_when: false
+  failed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Create Glance service user
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack user create --domain {{ keystone_default_domain }} --password '{{ glance_service_password }}' {{ glance_service_user }}
+  no_log: true
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - glance_user_check.rc != 0
+
+- name: Assign admin role to Glance service user
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack role add --project {{ keystone_service_project }} --user {{ glance_service_user }} admin
+  changed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Check Glance service catalog entry
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack service show {{ glance_service_type }} -f value -c id
+  register: glance_service_check
+  changed_when: false
+  failed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Create Glance service catalog entry
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack service create --name {{ glance_service_name }} --description "{{ glance_service_description }}" {{ glance_service_type }}
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - glance_service_check.rc != 0
+
+- name: Check Glance endpoint count
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack endpoint list --service {{ glance_service_name }} -f value -c ID | wc -l
+  register: glance_endpoint_count
+  changed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Create Glance public endpoint
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack endpoint create --region {{ keystone_region }} {{ glance_service_type }} public {{ glance_public_endpoint }}
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - glance_endpoint_count.stdout | int == 0
+
+- name: Create Glance internal endpoint
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack endpoint create --region {{ keystone_region }} {{ glance_service_type }} internal {{ glance_internal_endpoint }}
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - glance_endpoint_count.stdout | int == 0
+
+- name: Create Glance admin endpoint
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack endpoint create --region {{ keystone_region }} {{ glance_service_type }} admin {{ glance_admin_endpoint }}
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - glance_endpoint_count.stdout | int == 0
+
+- name: Deploy glance-api.conf
+  ansible.builtin.template:
+    src: glance-api.conf.j2
+    dest: "{{ glance_conf_path }}"
+    owner: root
+    group: glance
+    mode: "0640"
+    backup: true
+
+- name: Ensure Glance can read Ceph keyring
+  ansible.builtin.file:
+    path: /etc/ceph/ceph.client.glance.keyring
+    owner: root
+    group: glance
+    mode: "0640"
+
+- name: Check Glance DB sync marker
+  ansible.builtin.stat:
+    path: "{{ glance_db_sync_marker }}"
+  register: glance_db_sync_marker_stat
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Populate Glance database
+  ansible.builtin.command: glance-manage db_sync
+  become_user: glance
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - not glance_db_sync_marker_stat.stat.exists
+
+- name: Create Glance DB sync marker
+  ansible.builtin.file:
+    path: "{{ glance_db_sync_marker }}"
+    state: touch
+    owner: glance
+    group: glance
+    mode: "0600"
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - not glance_db_sync_marker_stat.stat.exists
+
+- name: Restart and enable Glance API
+  ansible.builtin.service:
+    name: "{{ glance_service }}"
+    state: restarted
+    enabled: true
+
+- name: Wait for Glance API port
+  ansible.builtin.wait_for:
+    host: "{{ glance_api_bind_host }}"
+    port: "{{ glance_api_port }}"
+    timeout: 60
+
+- name: Validate Glance API local response
+  ansible.builtin.uri:
+    url: "http://{{ glance_api_bind_host }}:{{ glance_api_port }}"
+    method: GET
+    status_code:
+      - 200
+      - 300
+      - 401

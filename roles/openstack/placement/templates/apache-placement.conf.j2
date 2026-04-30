@@ -1,0 +1,21 @@
+# Managed by Ansible - Placement API WSGI backend
+
+Listen {{ placement_api_bind_host }}:{{ placement_api_port }}
+
+<VirtualHost {{ placement_api_bind_host }}:{{ placement_api_port }}>
+    ServerName {{ internal_fqdn }}
+
+    WSGIDaemonProcess placement-api processes=4 threads=1 user=placement group=placement display-name=%{GROUP}
+    WSGIProcessGroup placement-api
+    WSGIApplicationGroup %{GLOBAL}
+    WSGIScriptAlias / /usr/bin/placement-api
+
+    WSGIPassAuthorization On
+
+    ErrorLog /var/log/apache2/placement_error.log
+    CustomLog /var/log/apache2/placement_access.log combined
+
+    <Directory /usr/bin>
+        Require all granted
+    </Directory>
+</VirtualHost>

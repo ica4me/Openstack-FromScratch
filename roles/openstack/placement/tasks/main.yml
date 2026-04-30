@@ -1,0 +1,196 @@
+---
+- name: Assert Placement variables exist
+  ansible.builtin.assert:
+    that:
+      - placement_db_name is defined
+      - placement_db_user is defined
+      - placement_db_password is defined
+      - placement_service_user is defined
+      - placement_service_password is defined
+      - placement_database_connection is defined
+      - placement_api_bind_host is defined
+      - placement_api_port is defined
+      - internal_fqdn is defined
+      - keystone_memcached_servers is defined
+    fail_msg: "Variabel Placement belum lengkap."
+
+- name: Install Placement packages
+  ansible.builtin.apt:
+    name: "{{ placement_packages }}"
+    state: present
+    update_cache: true
+
+- name: Ensure Placement database exists on bootstrap controller
+  community.mysql.mysql_db:
+    name: "{{ placement_db_name }}"
+    state: present
+    encoding: utf8
+    collation: utf8_general_ci
+    config_file: /root/.my.cnf
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Ensure Placement database user exists on bootstrap controller
+  community.mysql.mysql_user:
+    name: "{{ placement_db_user }}"
+    password: "{{ placement_db_password }}"
+    host: "%"
+    priv: "{{ placement_db_name }}.*:ALL"
+    state: present
+    config_file: /root/.my.cnf
+  no_log: true
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Check Placement service user
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack user show {{ placement_service_user }} -f value -c id
+  register: placement_user_check
+  changed_when: false
+  failed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Ensure service project exists
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack project show {{ keystone_service_project }} >/dev/null 2>&1 || \
+    openstack project create --domain {{ keystone_default_domain }} \
+      --description "Service Project" {{ keystone_service_project }}
+  changed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Create Placement service user
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack user create --domain {{ keystone_default_domain }} --password '{{ placement_service_password }}' {{ placement_service_user }}
+  no_log: true
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - placement_user_check.rc != 0
+
+- name: Assign admin role to Placement service user
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack role add --project {{ keystone_service_project }} --user {{ placement_service_user }} admin
+  changed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Check Placement service catalog entry
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack service show {{ placement_service_type }} -f value -c id
+  register: placement_service_check
+  changed_when: false
+  failed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Create Placement service catalog entry
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack service create --name {{ placement_service_name }} --description "{{ placement_service_description }}" {{ placement_service_type }}
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - placement_service_check.rc != 0
+
+- name: Check Placement endpoint count
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack endpoint list --service {{ placement_service_name }} -f value -c ID | wc -l
+  register: placement_endpoint_count
+  changed_when: false
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Create Placement public endpoint
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack endpoint create --region {{ keystone_region }} {{ placement_service_type }} public {{ placement_public_endpoint }}
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - placement_endpoint_count.stdout | int == 0
+
+- name: Create Placement internal endpoint
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack endpoint create --region {{ keystone_region }} {{ placement_service_type }} internal {{ placement_internal_endpoint }}
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - placement_endpoint_count.stdout | int == 0
+
+- name: Create Placement admin endpoint
+  ansible.builtin.shell: |
+    . /root/admin-openrc
+    openstack endpoint create --region {{ keystone_region }} {{ placement_service_type }} admin {{ placement_admin_endpoint }}
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - placement_endpoint_count.stdout | int == 0
+
+- name: Deploy placement.conf
+  ansible.builtin.template:
+    src: placement.conf.j2
+    dest: "{{ placement_conf_path }}"
+    owner: root
+    group: placement
+    mode: "0640"
+    backup: true
+
+- name: Check Placement DB sync marker
+  ansible.builtin.stat:
+    path: "{{ placement_db_sync_marker }}"
+  register: placement_db_sync_marker_stat
+  when: inventory_hostname == groups['controllers'][0]
+
+- name: Populate Placement database
+  ansible.builtin.command: placement-manage db sync
+  become_user: placement
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - not placement_db_sync_marker_stat.stat.exists
+
+- name: Create Placement DB sync marker
+  ansible.builtin.file:
+    path: "{{ placement_db_sync_marker }}"
+    state: touch
+    owner: placement
+    group: placement
+    mode: "0600"
+  when:
+    - inventory_hostname == groups['controllers'][0]
+    - not placement_db_sync_marker_stat.stat.exists
+
+- name: Deploy Placement Apache site
+  ansible.builtin.template:
+    src: apache-placement.conf.j2
+    dest: /etc/apache2/sites-available/placement-api.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+
+- name: Enable Placement Apache site
+  ansible.builtin.command: a2ensite placement-api.conf
+  register: a2ensite_placement
+  changed_when: "'already enabled' not in a2ensite_placement.stdout"
+
+- name: Validate Apache configuration
+  ansible.builtin.command: apache2ctl configtest
+  changed_when: false
+
+- name: Restart Apache2 for Placement
+  ansible.builtin.service:
+    name: apache2
+    state: restarted
+    enabled: true
+
+- name: Wait for Placement API port
+  ansible.builtin.wait_for:
+    host: "{{ placement_api_bind_host }}"
+    port: "{{ placement_api_port }}"
+    timeout: 60
+
+- name: Validate Placement API local response
+  ansible.builtin.uri:
+    url: "http://{{ placement_api_bind_host }}:{{ placement_api_port }}"
+    method: GET
+    status_code:
+      - 200
+      - 300
+      - 401

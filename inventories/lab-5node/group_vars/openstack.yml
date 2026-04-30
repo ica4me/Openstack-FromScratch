@@ -47,3 +47,45 @@ keystone_memcached_servers: >-
 
 keystone_fernet_key_repository: /etc/keystone/fernet-keys
 keystone_credential_key_repository: /etc/keystone/credential-keys
+
+# Glance / Image Service
+glance_db_name: glance
+glance_db_user: glance
+glance_db_password: "{{ vault_glance_db_password }}"
+glance_service_user: glance
+glance_service_password: "{{ vault_glance_service_password }}"
+glance_service_name: glance
+glance_service_type: image
+glance_service_description: "OpenStack Image"
+glance_api_port: 9292
+glance_api_bind_host: "{{ management_ip }}"
+glance_public_endpoint: "http://{{ internal_fqdn }}:9292"
+glance_internal_endpoint: "http://{{ internal_fqdn }}:9292"
+glance_admin_endpoint: "http://{{ internal_fqdn }}:9292"
+
+glance_database_connection: "mysql+pymysql://{{ glance_db_user }}:{{ glance_db_password }}@{{ vip_internal }}/{{ glance_db_name }}"
+
+# Glance backend: Ceph RBD
+glance_default_backend: rbd
+glance_enabled_backends: "rbd:rbd"
+glance_rbd_store_ceph_conf: /etc/ceph/ceph.conf
+glance_rbd_store_user: glance
+glance_rbd_store_pool: "{{ ceph_pools.glance | default('images') }}"
+glance_rbd_store_chunk_size: 8
+
+# Placement Service
+placement_db_name: placement
+placement_db_user: placement
+placement_db_password: "{{ vault_placement_db_password }}"
+placement_service_user: placement
+placement_service_password: "{{ vault_placement_service_password }}"
+placement_service_name: placement
+placement_service_type: placement
+placement_service_description: "Placement API"
+placement_api_port: 8778
+placement_api_bind_host: "{{ management_ip }}"
+placement_public_endpoint: "http://{{ internal_fqdn }}:8778"
+placement_internal_endpoint: "http://{{ internal_fqdn }}:8778"
+placement_admin_endpoint: "http://{{ internal_fqdn }}:8778"
+
+placement_database_connection: "mysql+pymysql://{{ placement_db_user }}:{{ placement_db_password }}@{{ vip_internal }}/{{ placement_db_name }}"

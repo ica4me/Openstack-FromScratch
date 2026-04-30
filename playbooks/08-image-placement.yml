@@ -1,0 +1,95 @@
+---
+- name: Phase 08 - Glance Image Service
+  hosts: controllers
+  become: true
+  gather_facts: true
+  serial: 1
+
+  roles:
+    - role: openstack/glance
+
+  post_tasks:
+    - name: Check Glance API service
+      ansible.builtin.command: systemctl is-active glance-api
+      changed_when: false
+
+    - name: Validate Glance API locally
+      ansible.builtin.uri:
+        url: "http://{{ management_ip }}:9292"
+        method: GET
+        status_code:
+          - 200
+          - 300
+          - 401
+
+- name: Phase 08 - Placement API
+  hosts: controllers
+  become: true
+  gather_facts: true
+  serial: 1
+
+  roles:
+    - role: openstack/placement
+
+  post_tasks:
+    - name: Check Apache2 service
+      ansible.builtin.command: systemctl is-active apache2
+      changed_when: false
+
+    - name: Validate Placement API locally
+      ansible.builtin.uri:
+        url: "http://{{ management_ip }}:8778"
+        method: GET
+        status_code:
+          - 200
+          - 300
+          - 401
+
+- name: Phase 08 - Validate Glance and Placement VIP endpoints
+  hosts: controllers
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Validate Glance endpoint through VIP
+      ansible.builtin.uri:
+        url: "http://{{ internal_fqdn }}:9292"
+        method: GET
+        status_code:
+          - 200
+          - 300
+          - 401
+      run_once: true
+      delegate_to: "{{ groups['controllers'][0] }}"
+
+    - name: Validate Placement endpoint through VIP
+      ansible.builtin.uri:
+        url: "http://{{ internal_fqdn }}:8778"
+        method: GET
+        status_code:
+          - 200
+          - 300
+          - 401
+      run_once: true
+      delegate_to: "{{ groups['controllers'][0] }}"
+
+    - name: Validate OpenStack service catalog entries
+      ansible.builtin.shell: |
+        set -e
+        . /root/admin-openrc
+        openstack service show image
+        openstack service show placement
+        openstack endpoint list --service glance
+        openstack endpoint list --service placement
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ groups['controllers'][0] }}"
+
+    - name: Print image-placement phase summary
+      ansible.builtin.debug:
+        msg:
+          - "Glance + Placement phase completed."
+          - "Glance endpoint: {{ glance_public_endpoint }}"
+          - "Placement endpoint: {{ placement_public_endpoint }}"
+          - "Glance backend: Ceph RBD pool {{ glance_rbd_store_pool }}"
+      run_once: true

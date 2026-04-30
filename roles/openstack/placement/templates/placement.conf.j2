@@ -1,0 +1,21 @@
+# Managed by Ansible - Placement API Caracal
+
+[DEFAULT]
+debug = false
+
+[placement_database]
+connection = {{ placement_database_connection }}
+
+[api]
+auth_strategy = keystone
+
+[keystone_authtoken]
+www_authenticate_uri = http://{{ internal_fqdn }}:5000
+auth_url = http://{{ internal_fqdn }}:5000
+memcached_servers = {{ keystone_memcached_servers }}
+auth_type = password
+project_domain_name = {{ keystone_default_domain }}
+user_domain_name = {{ keystone_default_domain }}
+project_name = {{ keystone_service_project }}
+username = {{ placement_service_user }}
+password = {{ placement_service_password }}

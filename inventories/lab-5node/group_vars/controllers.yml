@@ -38,12 +38,21 @@ haproxy_openstack_services:
     mode: http
     check_type: tcp
 
+#  - name: placement_api
+#    bind_ip: "{{ vip_internal }}"
+#    bind_port: 8778
+#    backend_port: 8778
+#    mode: http
+#    check_type: tcp
   - name: placement_api
     bind_ip: "{{ vip_internal }}"
     bind_port: 8778
     backend_port: 8778
     mode: http
-    check_type: tcp
+    httpchk:
+      method: GET
+      uri: /
+      expect_status: 200
 
   - name: nova_api
     bind_ip: "{{ vip_internal }}"

@@ -1,0 +1,8 @@
+---
+placement_packages:
+  - placement-api
+  - python3-pymysql
+  - python3-openstackclient
+
+placement_conf_path: /etc/placement/placement.conf
+placement_db_sync_marker: /var/lib/placement/.db_synced

@@ -1,0 +1,34 @@
+# Managed by Ansible - Glance API Caracal
+
+[DEFAULT]
+debug = false
+bind_host = {{ glance_api_bind_host }}
+bind_port = {{ glance_api_port }}
+workers = {{ glance_api_workers }}
+enabled_backends = {{ glance_enabled_backends }}
+
+[database]
+connection = {{ glance_database_connection }}
+
+[glance_store]
+default_backend = {{ glance_default_backend }}
+
+[rbd]
+rbd_store_ceph_conf = {{ glance_rbd_store_ceph_conf }}
+rbd_store_user = {{ glance_rbd_store_user }}
+rbd_store_pool = {{ glance_rbd_store_pool }}
+rbd_store_chunk_size = {{ glance_rbd_store_chunk_size }}
+
+[keystone_authtoken]
+www_authenticate_uri = http://{{ internal_fqdn }}:5000
+auth_url = http://{{ internal_fqdn }}:5000
+memcached_servers = {{ keystone_memcached_servers }}
+auth_type = password
+project_domain_name = {{ keystone_default_domain }}
+user_domain_name = {{ keystone_default_domain }}
+project_name = {{ keystone_service_project }}
+username = {{ glance_service_user }}
+password = {{ glance_service_password }}
+
+[paste_deploy]
+flavor = keystone
