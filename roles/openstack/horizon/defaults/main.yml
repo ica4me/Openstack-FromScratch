@@ -1,0 +1,28 @@
+---
+horizon_packages:
+  - openstack-dashboard
+  - python3-memcache
+
+horizon_apache_service: apache2
+
+horizon_local_settings_path: /etc/openstack-dashboard/local_settings.py
+horizon_secret_key_path: /etc/openstack-dashboard/.secret_key
+
+horizon_bind_ip: "{{ management_ip }}"
+horizon_bind_port: 80
+horizon_server_name: "{{ internal_fqdn | default('openstack-api.internal') }}"
+
+horizon_allowed_hosts:
+  - "*"
+
+horizon_openstack_host: "{{ internal_fqdn | default('openstack-api.internal') }}"
+horizon_keystone_url: "{{ service_endpoints.keystone | default('http://openstack-api.internal:5000/v3') }}"
+
+horizon_timezone: Asia/Jakarta
+
+horizon_session_engine: django.contrib.sessions.backends.cache
+horizon_cache_backend: django.core.cache.backends.memcached.PyMemcacheCache
+horizon_memcached_servers: "{{ groups['controllers'] | map('extract', hostvars, 'management_ip') | map('regex_replace', '$', ':11211') | list }}"
+
+horizon_enable_lb_cookie: true
+horizon_webroot: /horizon

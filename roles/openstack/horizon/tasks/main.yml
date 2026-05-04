@@ -1,0 +1,165 @@
+---
+- name: Assert Horizon variables exist
+  ansible.builtin.assert:
+    that:
+      - service_endpoints.keystone is defined
+      - internal_fqdn is defined or horizon_openstack_host is defined
+      - groups['controllers'] is defined
+    fail_msg: "Variabel Horizon belum lengkap."
+
+- name: Install Horizon packages
+  ansible.builtin.apt:
+    name: "{{ horizon_packages }}"
+    state: present
+    update_cache: true
+  retries: 3
+  delay: 10
+  register: horizon_pkg_result
+  until: horizon_pkg_result is succeeded
+
+- name: Ensure Horizon secret key file status
+  ansible.builtin.stat:
+    path: "{{ horizon_secret_key_path }}"
+  register: horizon_secret_key_stat
+
+- name: Generate Horizon secret key when missing
+  ansible.builtin.command: python3 -c "import secrets; print(secrets.token_urlsafe(64))"
+  register: horizon_secret_key_generated
+  changed_when: true
+  when: not horizon_secret_key_stat.stat.exists
+
+- name: Write Horizon secret key when missing
+  ansible.builtin.copy:
+    content: "{{ horizon_secret_key_generated.stdout }}\n"
+    dest: "{{ horizon_secret_key_path }}"
+    owner: root
+    group: horizon
+    mode: "0640"
+  when: not horizon_secret_key_stat.stat.exists
+  notify: Restart Apache for Horizon
+
+- name: Read Horizon secret key
+  ansible.builtin.slurp:
+    path: "{{ horizon_secret_key_path }}"
+  register: horizon_secret_key_slurp
+  no_log: true
+
+- name: Set Horizon secret key fact
+  ansible.builtin.set_fact:
+    horizon_secret_key: "{{ horizon_secret_key_slurp.content | b64decode | trim }}"
+  no_log: true
+
+- name: Disable Ubuntu default openstack-dashboard Apache alias if present
+  ansible.builtin.file:
+    path: /etc/apache2/conf-enabled/openstack-dashboard.conf
+    state: absent
+  notify: Restart Apache for Horizon
+
+- name: Remove previous Horizon site if managed
+  ansible.builtin.file:
+    path: /etc/apache2/sites-enabled/horizon.conf
+    state: absent
+  notify: Restart Apache for Horizon
+
+- name: Deploy Horizon local_settings.py
+  ansible.builtin.template:
+    src: local_settings.py.j2
+    dest: "{{ horizon_local_settings_path }}"
+    owner: root
+    group: horizon
+    mode: "0640"
+    backup: true
+  notify: Restart Apache for Horizon
+
+- name: Deploy Horizon Apache site
+  ansible.builtin.template:
+    src: apache-horizon.conf.j2
+    dest: /etc/apache2/sites-available/horizon.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  notify: Restart Apache for Horizon
+
+- name: Enable Horizon Apache site
+  ansible.builtin.file:
+    src: /etc/apache2/sites-available/horizon.conf
+    dest: /etc/apache2/sites-enabled/horizon.conf
+    state: link
+  notify: Restart Apache for Horizon
+
+- name: Ensure Apache WSGI module is enabled
+  ansible.builtin.command: a2enmod wsgi
+  register: horizon_a2enmod_wsgi
+  changed_when: "'already enabled' not in horizon_a2enmod_wsgi.stdout"
+  failed_when: horizon_a2enmod_wsgi.rc != 0
+  notify: Restart Apache for Horizon
+
+- name: Ensure Apache rewrite module is enabled
+  ansible.builtin.command: a2enmod rewrite
+  register: horizon_a2enmod_rewrite
+  changed_when: "'already enabled' not in horizon_a2enmod_rewrite.stdout"
+  failed_when: horizon_a2enmod_rewrite.rc != 0
+  notify: Restart Apache for Horizon
+
+- name: Validate Horizon local_settings syntax
+  ansible.builtin.command: python3 -m py_compile "{{ horizon_local_settings_path }}"
+  changed_when: false
+
+#- name: Collect Horizon static assets
+#  ansible.builtin.command: python3 /usr/share/openstack-dashboard/manage.py collectstatic --noinput
+#  environment:
+#    DJANGO_SETTINGS_MODULE: openstack_dashboard.settings
+#  changed_when: false
+#  failed_when: false
+
+- name: Ensure Horizon static directory exists
+  ansible.builtin.file:
+    path: /var/lib/openstack-dashboard/static
+    state: directory
+    owner: horizon
+    group: horizon
+    mode: "0755"
+
+- name: Collect Horizon static assets
+  ansible.builtin.command: python3 /usr/share/openstack-dashboard/manage.py collectstatic --noinput --clear
+  environment:
+    DJANGO_SETTINGS_MODULE: openstack_dashboard.settings
+  changed_when: false
+
+
+- name: Compress Horizon static assets
+  ansible.builtin.command: python3 /usr/share/openstack-dashboard/manage.py compress --force
+  environment:
+    DJANGO_SETTINGS_MODULE: openstack_dashboard.settings
+  changed_when: false
+  failed_when: false
+
+- name: Validate Apache configuration
+  ansible.builtin.command: apache2ctl configtest
+  changed_when: false
+
+- name: Flush handlers before Horizon validation
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure Apache is enabled and started
+  ansible.builtin.service:
+    name: "{{ horizon_apache_service }}"
+    state: started
+    enabled: true
+
+- name: Wait for Horizon backend port
+  ansible.builtin.wait_for:
+    host: "{{ horizon_bind_ip }}"
+    port: "{{ horizon_bind_port }}"
+    timeout: 60
+
+- name: Validate Horizon backend
+  ansible.builtin.uri:
+    url: "http://{{ horizon_bind_ip }}:{{ horizon_bind_port }}{{ horizon_webroot }}/"
+    status_code:
+      - 200
+      - 302
+    return_content: false
+  register: horizon_backend_check
+  changed_when: false

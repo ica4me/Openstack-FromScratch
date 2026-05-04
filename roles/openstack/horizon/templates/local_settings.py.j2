@@ -1,0 +1,56 @@
+# Managed by Ansible - OpenStack Horizon local_settings.py
+
+import os
+from django.utils.translation import gettext_lazy as _
+
+DEBUG = False
+
+WEBROOT = '{{ horizon_webroot }}/'
+STATIC_URL = WEBROOT + 'static/'
+
+ALLOWED_HOSTS = {{ horizon_allowed_hosts | to_json }}
+
+OPENSTACK_HOST = "{{ horizon_openstack_host }}"
+OPENSTACK_KEYSTONE_URL = "{{ horizon_keystone_url }}"
+OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT = True
+OPENSTACK_KEYSTONE_DEFAULT_DOMAIN = "{{ openstack_domain | default('Default') }}"
+OPENSTACK_KEYSTONE_DEFAULT_ROLE = "member"
+OPENSTACK_API_VERSIONS = {
+    "identity": 3,
+    "image": 2,
+    "volume": 3,
+}
+
+OPENSTACK_NEUTRON_NETWORK = {
+    "enable_router": True,
+    "enable_quotas": True,
+    "enable_ipv6": True,
+    "enable_distributed_router": False,
+    "enable_ha_router": True,
+    "enable_fip_topology_check": True,
+}
+
+TIME_ZONE = "{{ horizon_timezone }}"
+
+SESSION_ENGINE = "{{ horizon_session_engine }}"
+
+CACHES = {
+    "default": {
+        "BACKEND": "{{ horizon_cache_backend }}",
+        "LOCATION": {{ horizon_memcached_servers | to_json }},
+    }
+}
+
+SECRET_KEY = "{{ horizon_secret_key }}"
+
+LOGIN_REDIRECT_URL = WEBROOT
+LOGOUT_REDIRECT_URL = WEBROOT
+
+COMPRESS_OFFLINE = True
+COMPRESS_ROOT = "/var/lib/openstack-dashboard/static"
+
+POLICY_FILES_PATH = "/etc/openstack-dashboard"
+
+AVAILABLE_REGIONS = [
+    ("{{ horizon_keystone_url }}", "{{ openstack_region | default('RegionOne') }}"),
+]

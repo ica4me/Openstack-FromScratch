@@ -87,7 +87,10 @@ haproxy_openstack_services:
     bind_port: 80
     backend_port: 80
     mode: http
-    check_type: tcp
+    httpchk:
+      method: GET
+      uri: /
+      expect_rstatus: "^(2|3)[0-9][0-9]$"
 
 # MariaDB Galera
 mariadb_bind_address: "0.0.0.0"

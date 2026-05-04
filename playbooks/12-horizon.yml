@@ -1,0 +1,30 @@
+---
+- name: Phase 12 - Horizon Dashboard
+  hosts: controllers
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: openstack/horizon
+
+  post_tasks:
+    - name: Validate Horizon through VIP
+      ansible.builtin.uri:
+        url: "http://{{ vip_internal }}{{ horizon_webroot }}/"
+        status_code:
+          - 200
+          - 302
+        return_content: false
+      register: horizon_vip_check
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ bootstrap_controller }}"
+
+    - name: Print Horizon phase summary
+      ansible.builtin.debug:
+        msg:
+          - "Horizon phase completed."
+          - "Dashboard URL: http://{{ vip_internal }}{{ horizon_webroot }}/"
+          - "Backend bind: {{ horizon_bind_ip }}:{{ horizon_bind_port }}"
+          - "Keystone URL: {{ horizon_keystone_url }}"
+      run_once: true

@@ -1,0 +1,5 @@
+---
+- name: Restart Apache for Horizon
+  ansible.builtin.service:
+    name: "{{ horizon_apache_service }}"
+    state: restarted
