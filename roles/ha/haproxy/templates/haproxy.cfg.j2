@@ -58,17 +58,32 @@ listen {{ svc.name }}
     bind {{ svc.bind_ip }}:{{ svc.bind_port }}
     mode {{ svc.mode | default('http') }}
     balance roundrobin
+
 {% if svc.mode | default('http') == 'http' %}
 {% if svc.httpchk is defined %}
+{% if svc.httpchk is mapping %}
     option httpchk {{ svc.httpchk.method | default('GET') }} {{ svc.httpchk.uri | default('/') }}
 {% if svc.httpchk.expect_status is defined %}
     http-check expect status {{ svc.httpchk.expect_status }}
+{% elif svc.httpchk.expect_rstatus is defined %}
+    http-check expect rstatus {{ svc.httpchk.expect_rstatus }}
+{% else %}
+    http-check expect rstatus ^(2|3)[0-9][0-9]$
+{% endif %}
+{% else %}
+    option httpchk {{ svc.httpchk }}
+{% if svc.http_check_expect is defined %}
+    http-check expect {{ svc.http_check_expect }}
+{% else %}
+    http-check expect rstatus ^(2|3)[0-9][0-9]$
+{% endif %}
 {% endif %}
 {% else %}
     option httpchk GET /
-    http-check expect status 200
+    http-check expect rstatus ^(2|3)[0-9][0-9]$
 {% endif %}
 {% endif %}
+
 {% for host in groups['controllers'] %}
     server {{ host }} {{ hostvars[host].management_ip }}:{{ svc.backend_port }} check inter 2000 rise 2 fall 3
 {% endfor %}

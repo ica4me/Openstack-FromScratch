@@ -1,0 +1,64 @@
+---
+admin_openrc_path: /root/admin-openrc
+#admin_openrc_path: ~/root/openstack-caracal-ansible/admin-openrc-scratch
+
+cinder_packages:
+  - cinder-api
+  - cinder-scheduler
+  - cinder-volume
+  - python3-cinderclient
+  - python3-rbd
+  - ceph-common
+
+# Hanya service yang benar-benar dikelola systemd.
+# cinder-api dikelola Apache WSGI, bukan systemctl cinder-api.
+cinder_services:
+  - cinder-scheduler
+  - cinder-volume
+
+cinder_api_service: apache2
+
+cinder_service_name: cinder
+cinder_service_type: volumev3
+cinder_service_description: "OpenStack Block Storage"
+cinder_database_name: cinder
+cinder_database_user: cinder
+cinder_db_password: "{{ vault_cinder_db_password }}"
+cinder_service_user: cinder
+cinder_service_password: "{{ vault_cinder_service_password }}"
+
+cinder_bind_host: "{{ management_ip }}"
+cinder_bind_port: 8776
+
+cinder_conf_path: /etc/cinder/cinder.conf
+cinder_policy_path: /etc/cinder/policy.yaml
+
+cinder_state_path: /var/lib/cinder
+cinder_lock_path: /var/lib/cinder/tmp
+
+cinder_db_sync_marker: /var/lib/cinder/.db_synced
+
+rabbitmq_openstack_user: openstack
+rabbitmq_openstack_password: "{{ vault_rabbitmq_openstack_password }}"
+
+cinder_rabbit_hosts: >-
+  {{
+    groups['controllers']
+    | map('extract', hostvars, 'management_ip')
+    | map('regex_replace', '^(.*)$', rabbitmq_openstack_user ~ ':' ~ rabbitmq_openstack_password ~ '@\\1:5672')
+    | join(',')
+  }}
+
+cinder_transport_url: "rabbit://{{ cinder_rabbit_hosts }}/"
+
+cinder_memcached_servers: "{{ memcached_servers }}"
+
+cinder_rbd_pool: "{{ ceph_pools.cinder | default('volumes') }}"
+cinder_rbd_user: "{{ cinder_rbd_user | default('cinder') }}"
+cinder_rbd_secret_uuid: "{{ rbd_secret_uuid }}"
+cinder_rbd_ceph_conf: /etc/ceph/ceph.conf
+cinder_rbd_keyring: /etc/ceph/ceph.client.cinder.keyring
+
+cinder_backend_name: ceph
+cinder_enabled_backends:
+  - ceph

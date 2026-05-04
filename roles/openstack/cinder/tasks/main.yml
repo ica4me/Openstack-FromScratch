@@ -1,0 +1,248 @@
+---
+- name: Assert Cinder variables exist
+  ansible.builtin.assert:
+    that:
+      - cinder_db_password is defined
+      - cinder_service_password is defined
+      - service_endpoints.cinder is defined
+      - service_endpoints.keystone is defined
+      - service_endpoints.glance is defined
+      - cinder_transport_url is defined
+      - cinder_rbd_pool is defined
+      - cinder_rbd_secret_uuid is defined
+    fail_msg: "Variabel Cinder belum lengkap."
+
+- name: Install Cinder packages
+  ansible.builtin.apt:
+    name: "{{ cinder_packages }}"
+    state: present
+    update_cache: true
+  retries: 3
+  delay: 10
+  register: cinder_pkg_result
+  until: cinder_pkg_result is succeeded
+
+- name: Ensure Cinder directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: cinder
+    group: cinder
+    mode: "0755"
+  loop:
+    - "{{ cinder_state_path }}"
+    - "{{ cinder_lock_path }}"
+
+- name: Validate admin-openrc exists on bootstrap controller
+  ansible.builtin.stat:
+    path: "{{ admin_openrc_path }}"
+  register: admin_openrc_stat
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Assert admin-openrc exists
+  ansible.builtin.assert:
+    that:
+      - admin_openrc_stat.stat.exists
+    fail_msg: "{{ admin_openrc_path }} tidak ada di {{ bootstrap_controller }}. Buat/restore dulu file auth OpenStack admin."
+  run_once: true
+
+- name: Ensure Cinder database exists on bootstrap controller
+  community.mysql.mysql_db:
+    name: "{{ cinder_database_name }}"
+    state: present
+    login_user: root
+    login_password: "{{ vault_mysql_root_password }}"
+    login_unix_socket: /run/mysqld/mysqld.sock
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Ensure Cinder database user exists on bootstrap controller
+  community.mysql.mysql_user:
+    name: "{{ cinder_database_user }}"
+    password: "{{ cinder_db_password }}"
+    host: "{{ item }}"
+    priv: "{{ cinder_database_name }}.*:ALL"
+    state: present
+    login_user: root
+    login_password: "{{ vault_mysql_root_password }}"
+    login_unix_socket: /run/mysqld/mysqld.sock
+  loop:
+    - "%"
+    - localhost
+  no_log: false
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Check Cinder service user
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack user show {{ cinder_service_user }} --domain {{ openstack_domain }} -f value -c id
+  register: cinder_user_check
+  changed_when: false
+  failed_when: false
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Create Cinder service user
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack user create {{ cinder_service_user }} \
+      --domain {{ openstack_domain }} \
+      --password '{{ cinder_service_password }}'
+  when: cinder_user_check.rc != 0
+  no_log: false
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Assign admin role to Cinder service user
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack role add --project service --user {{ cinder_service_user }} admin
+  register: cinder_role_add
+  changed_when: cinder_role_add.rc == 0
+  failed_when: cinder_role_add.rc != 0 and 'Conflict occurred' not in cinder_role_add.stderr
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Check Cinder service catalog
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack service show {{ cinder_service_name }} -f value -c id
+  register: cinder_service_check
+  changed_when: false
+  failed_when: false
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Create Cinder volumev3 service
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack service create \
+      --name {{ cinder_service_name }} \
+      --description "{{ cinder_service_description }}" \
+      {{ cinder_service_type }}
+  when: cinder_service_check.rc != 0
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Ensure Cinder endpoints exist
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack endpoint create --region {{ openstack_region }} \
+      {{ cinder_service_type }} {{ item }} "{{ service_endpoints.cinder }}"
+  register: cinder_endpoint_create
+  changed_when: cinder_endpoint_create.rc == 0
+  failed_when: >
+    cinder_endpoint_create.rc != 0 and
+    'Conflict occurred' not in cinder_endpoint_create.stderr and
+    'Duplicate entry' not in cinder_endpoint_create.stderr
+  loop:
+    - public
+    - internal
+    - admin
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Deploy cinder.conf
+  ansible.builtin.template:
+    src: cinder.conf.j2
+    dest: "{{ cinder_conf_path }}"
+    owner: root
+    group: cinder
+    mode: "0640"
+    backup: true
+  notify:
+    - Restart Cinder API
+    - Restart Cinder services
+
+- name: Deploy Cinder Apache WSGI config
+  ansible.builtin.template:
+    src: apache-cinder.conf.j2
+    dest: /etc/apache2/sites-available/cinder-api.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  notify: Restart Cinder API
+
+- name: Disable packaged empty Cinder WSGI conf if present
+  ansible.builtin.file:
+    path: /etc/apache2/conf-enabled/cinder-wsgi.conf
+    state: absent
+  notify: Restart Cinder API
+
+- name: Enable Cinder Apache site
+  ansible.builtin.file:
+    src: /etc/apache2/sites-available/cinder-api.conf
+    dest: /etc/apache2/sites-enabled/cinder-api.conf
+    state: link
+  notify: Restart Cinder API
+
+- name: Validate Apache config after Cinder API site
+  ansible.builtin.command: apache2ctl configtest
+  changed_when: false
+
+
+- name: Validate Ceph client.cinder keyring exists
+  ansible.builtin.stat:
+    path: "{{ cinder_rbd_keyring }}"
+  register: cinder_keyring_stat
+
+- name: Assert Ceph client.cinder keyring exists
+  ansible.builtin.assert:
+    that:
+      - cinder_keyring_stat.stat.exists
+      - cinder_keyring_stat.stat.size | int > 0
+    fail_msg: "{{ cinder_rbd_keyring }} tidak ada/kosong. Jalankan make ceph atau salin ceph.client.cinder.keyring dulu."
+
+- name: Validate Cinder can access Ceph volumes pool
+  ansible.builtin.command: "rbd -p {{ cinder_rbd_pool }} ls --id {{ cinder_rbd_user }}"
+  changed_when: false
+
+- name: Check Cinder DB sync marker
+  ansible.builtin.stat:
+    path: "{{ cinder_db_sync_marker }}"
+  register: cinder_db_sync_marker_stat
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Sync Cinder database
+  ansible.builtin.command: cinder-manage db sync
+  become_user: cinder
+  when: not cinder_db_sync_marker_stat.stat.exists
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Create Cinder DB sync marker
+  ansible.builtin.file:
+    path: "{{ cinder_db_sync_marker }}"
+    state: touch
+    owner: cinder
+    group: cinder
+    mode: "0600"
+  when: not cinder_db_sync_marker_stat.stat.exists
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Flush handlers before service validation
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure Cinder services are enabled and started
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop: "{{ cinder_services }}"
+
+- name: Ensure Apache for Cinder API is enabled and started
+  ansible.builtin.service:
+    name: "{{ cinder_api_service | default('apache2') }}"
+    state: started
+    enabled: true
+
+- name: Wait for Cinder API port
+  ansible.builtin.wait_for:
+    host: "{{ cinder_bind_host }}"
+    port: "{{ cinder_bind_port }}"
+    timeout: 90

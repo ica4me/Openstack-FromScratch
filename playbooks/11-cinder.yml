@@ -1,0 +1,52 @@
+---
+- name: Phase 11 - Cinder Block Storage with Ceph RBD
+  hosts: controllers
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: openstack/cinder
+
+  post_tasks:
+    - name: Validate Cinder API local port
+      ansible.builtin.wait_for:
+        host: "{{ management_ip }}"
+        port: "{{ cinder_bind_port }}"
+        timeout: 60
+
+    - name: Validate Cinder API through VIP
+      ansible.builtin.uri:
+        url: "{{ service_endpoints.cinder | regex_replace('/v3/%\\(project_id\\)s$', '') }}"
+        method: GET
+        status_code:
+          - 200
+          - 300
+          - 401
+        timeout: 10
+      run_once: true
+      delegate_to: "{{ bootstrap_controller }}"
+
+    - name: Validate Cinder services from OpenStack CLI
+      ansible.builtin.shell: |
+        . {{ admin_openrc_path }}
+        openstack volume service list
+      register: cinder_service_list
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ bootstrap_controller }}"
+
+    - name: Print Cinder services
+      ansible.builtin.debug:
+        var: cinder_service_list.stdout_lines
+      run_once: true
+
+    - name: Print Cinder phase summary
+      ansible.builtin.debug:
+        msg:
+          - "Cinder phase completed."
+          - "Endpoint: {{ service_endpoints.cinder }}"
+          - "Cinder API bind: {{ management_ip }}:{{ cinder_bind_port }}"
+          - "Cinder backend: Ceph RBD"
+          - "Cinder RBD pool: {{ cinder_rbd_pool }}"
+          - "Cinder RBD user: {{ cinder_rbd_user }}"
+      run_once: true

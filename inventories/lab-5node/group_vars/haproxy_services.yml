@@ -1,0 +1,68 @@
+---
+haproxy_openstack_services:
+  - name: keystone_public
+    bind_ip: "{{ vip_internal }}"
+    bind_port: 5000
+    backend_port: 5000
+    mode: http
+    httpchk:
+      method: GET
+      uri: /v3
+      expect_status: 200
+
+  - name: glance_api
+    bind_ip: "{{ internal_vip }}"
+    bind_port: 9292
+    backend_port: 9292
+    mode: http
+    httpchk:
+      method: GET
+      uri: /
+      expect_rstatus: "^(2|3)[0-9][0-9]$"
+
+  - name: placement_api
+    bind_ip: "{{ internal_vip }}"
+    bind_port: 8778
+    backend_port: 8778
+    mode: http
+    httpchk:
+      method: GET
+      uri: /
+      expect_rstatus: "^(2|3)[0-9][0-9]$"
+
+  - name: nova_api
+    bind_ip: "{{ internal_vip }}"
+    bind_port: 8774
+    backend_port: 8774
+    mode: http
+    httpchk:
+      method: GET
+      uri: /
+      expect_rstatus: "^(2|3)[0-9][0-9]$"
+
+  - name: neutron_api
+    bind_ip: "{{ internal_vip }}"
+    bind_port: 9696
+    backend_port: 9696
+    mode: http
+    httpchk:
+      method: GET
+      uri: /
+      expect_rstatus: "^(2|3)[0-9][0-9]$"
+
+  - name: cinder_api
+    bind_ip: "{{ internal_vip }}"
+    bind_port: 8776
+    backend_port: 8776
+    mode: http
+    httpchk:
+      method: GET
+      uri: /
+      expect_rstatus: "^(2|3)[0-9][0-9]$"
+
+  - name: horizon
+    bind_ip: "{{ vip_internal }}"
+    bind_port: 80
+    backend_port: 80
+    mode: http
+    check_type: tcp

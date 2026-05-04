@@ -4,18 +4,14 @@
   become: true
   gather_facts: true
 
-  pre_tasks:
-    - name: Force load lab group vars
-      ansible.builtin.include_vars:
-        file: "{{ item }}"
-      loop:
-        - "{{ playbook_dir }}/../inventories/lab-5node/group_vars/all.yml"
-        - "{{ playbook_dir }}/../inventories/lab-5node/group_vars/network.yml"
-        - "{{ playbook_dir }}/../inventories/lab-5node/group_vars/openstack.yml"
-        - "{{ playbook_dir }}/../inventories/lab-5node/group_vars/controllers.yml"
-        - "{{ playbook_dir }}/../inventories/lab-5node/group_vars/haproxy_services.yml"
-        - "{{ playbook_dir }}/../inventories/lab-5node/group_vars/vault.yml"
+  vars_files:
+    - ../inventories/lab-5node/group_vars/all.yml
+    - ../inventories/lab-5node/group_vars/controllers.yml
+    - ../inventories/lab-5node/group_vars/openstack.yml
+    - ../inventories/lab-5node/group_vars/network.yml
+    - ../inventories/lab-5node/group_vars/vault.yml
 
+  pre_tasks:
     - name: Debug HAProxy service variables before role
       ansible.builtin.debug:
         msg:

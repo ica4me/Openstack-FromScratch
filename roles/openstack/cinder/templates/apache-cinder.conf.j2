@@ -1,0 +1,35 @@
+# Managed by Ansible - Cinder API WSGI backend
+# Apache hanya listen di management IP. HAProxy listen di VIP.
+
+Listen {{ cinder_bind_host }}:{{ cinder_bind_port }}
+
+<VirtualHost {{ cinder_bind_host }}:{{ cinder_bind_port }}>
+    ServerName {{ internal_fqdn }}
+
+    WSGIDaemonProcess cinder-api \
+        processes=4 \
+        threads=1 \
+        user=cinder \
+        group=cinder \
+        display-name=%{GROUP}
+
+    WSGIProcessGroup cinder-api
+    WSGIApplicationGroup %{GLOBAL}
+
+    WSGIImportScript /usr/bin/cinder-wsgi \
+        process-group=cinder-api \
+        application-group=%{GLOBAL}
+
+    WSGIScriptAlias / /usr/bin/cinder-wsgi \
+        process-group=cinder-api \
+        application-group=%{GLOBAL}
+
+    WSGIPassAuthorization On
+
+    ErrorLog /var/log/apache2/cinder_error.log
+    CustomLog /var/log/apache2/cinder_access.log combined
+
+    <Directory /usr/bin>
+        Require all granted
+    </Directory>
+</VirtualHost>

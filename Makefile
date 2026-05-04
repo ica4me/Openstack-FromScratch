@@ -68,3 +68,6 @@ nova:
 
 neutron:
 	ansible-playbook -i $(INV) playbooks/10-neutron.yml
+
+cinder:
+	ansible-playbook -i $(INV) playbooks/11-cinder.yml

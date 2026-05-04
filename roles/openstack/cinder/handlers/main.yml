@@ -1,0 +1,12 @@
+---
+- name: Restart Cinder API
+  ansible.builtin.service:
+    name: "{{ cinder_api_service | default('apache2') }}"
+    state: restarted
+
+- name: Restart Cinder services
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: restarted
+    enabled: true
+  loop: "{{ cinder_services }}"

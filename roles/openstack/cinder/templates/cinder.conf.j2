@@ -1,0 +1,50 @@
+# Managed by Ansible - Cinder Block Storage
+
+[DEFAULT]
+my_ip = {{ management_ip }}
+osapi_volume_listen = {{ cinder_bind_host }}
+osapi_volume_listen_port = {{ cinder_bind_port }}
+
+transport_url = {{ cinder_transport_url }}
+auth_strategy = keystone
+
+enabled_backends = {{ cinder_enabled_backends | join(',') }}
+glance_api_servers = {{ service_endpoints.glance }}
+
+state_path = {{ cinder_state_path }}
+rootwrap_config = /etc/cinder/rootwrap.conf
+api_paste_config = /etc/cinder/api-paste.ini
+
+[database]
+connection = mysql+pymysql://{{ cinder_database_user }}:{{ cinder_db_password }}@{{ db_host }}/{{ cinder_database_name }}
+
+[keystone_authtoken]
+www_authenticate_uri = {{ service_endpoints.keystone | regex_replace('/v3$', '') }}
+auth_url = {{ service_endpoints.keystone }}
+memcached_servers = {{ cinder_memcached_servers }}
+auth_type = password
+project_domain_name = {{ openstack_domain }}
+user_domain_name = {{ openstack_domain }}
+project_name = service
+username = {{ cinder_service_user }}
+password = {{ cinder_service_password }}
+service_token_roles_required = true
+
+[oslo_concurrency]
+lock_path = {{ cinder_lock_path }}
+
+[oslo_messaging_notifications]
+driver = messagingv2
+
+[ceph]
+volume_driver = cinder.volume.drivers.rbd.RBDDriver
+volume_backend_name = {{ cinder_backend_name }}
+rbd_pool = {{ cinder_rbd_pool }}
+rbd_user = {{ cinder_rbd_user }}
+rbd_ceph_conf = {{ cinder_rbd_ceph_conf }}
+rbd_secret_uuid = {{ cinder_rbd_secret_uuid }}
+rbd_flatten_volume_from_snapshot = false
+rbd_max_clone_depth = 5
+rbd_store_chunk_size = 4
+rados_connect_timeout = -1
+report_discard_supported = true
