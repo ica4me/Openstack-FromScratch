@@ -5,7 +5,8 @@ my_ip = {{ management_ip }}
 osapi_volume_listen = {{ cinder_bind_host }}
 osapi_volume_listen_port = {{ cinder_bind_port }}
 
-transport_url = {{ cinder_transport_url }}
+#transport_url = {{ cinder_transport_url }}
+transport_url = rabbit://{% for host in groups['controllers'] %}{{ rabbitmq_openstack_user }}:{{ rabbitmq_openstack_password }}@{{ hostvars[host].management_ip }}:5672{% if not loop.last %},{% endif %}{% endfor %}/
 auth_strategy = keystone
 
 enabled_backends = {{ cinder_enabled_backends | join(',') }}

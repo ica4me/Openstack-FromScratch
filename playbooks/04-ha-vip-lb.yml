@@ -13,7 +13,7 @@
         - "{{ playbook_dir }}/../inventories/lab-5node/group_vars/network.yml"
         - "{{ playbook_dir }}/../inventories/lab-5node/group_vars/openstack.yml"
         - "{{ playbook_dir }}/../inventories/lab-5node/group_vars/controllers.yml"
-        - "{{ playbook_dir }}/../inventories/lab-5node/group_vars/haproxy_services.yml"
+#        - "{{ playbook_dir }}/../inventories/lab-5node/group_vars/haproxy_services.yml"
         - "{{ playbook_dir }}/../inventories/lab-5node/group_vars/vault.yml"
 
     - name: Debug HAProxy service variables before role
