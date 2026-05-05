@@ -33,17 +33,6 @@
   until: gnocchi_pkg_result is succeeded
 
 
-#- name: Ensure Gnocchi directories exist
-#  ansible.builtin.file:
-#    path: "{{ item }}"
-#    state: directory
-#    owner: gnocchi
-#    group: gnocchi
-#    mode: "0755"
-#  loop:
-#    - /var/lib/gnocchi
-#    - /var/lib/gnocchi/coordination
-#    - /var/log/gnocchi
 - name: Ensure Gnocchi directories exist
   ansible.builtin.file:
     path: "{{ item }}"
@@ -53,7 +42,7 @@
     mode: "0755"
   loop:
     - "{{ gnocchi_state_path }}"
-    - "{{ gnocchi_incoming_path }}"
+    - "{{ gnocchi_incoming_path }}/tmp"
     - "{{ gnocchi_log_path }}"
 
 
@@ -134,23 +123,57 @@
   run_once: true
   delegate_to: "{{ bootstrap_controller }}"
 
-- name: Ensure Gnocchi endpoints exist
+#- name: Ensure Gnocchi endpoints exist
+#  ansible.builtin.shell: |
+#    . {{ admin_openrc_path }}
+#    openstack endpoint create --region {{ openstack_region }} \
+#      {{ gnocchi_service_type }} {{ item }} "{{ gnocchi_endpoint }}"
+#  register: gnocchi_endpoint_create
+#  changed_when: gnocchi_endpoint_create.rc == 0
+#  failed_when: >
+#    gnocchi_endpoint_create.rc != 0 and
+#    'Conflict occurred' not in gnocchi_endpoint_create.stderr and
+#    'Duplicate entry' not in gnocchi_endpoint_create.stderr
+#  loop:
+#    - public
+#    - internal
+#    - admin
+#  run_once: true
+#  delegate_to: "{{ bootstrap_controller }}"
+- name: Check Gnocchi endpoints
   ansible.builtin.shell: |
     . {{ admin_openrc_path }}
-    openstack endpoint create --region {{ openstack_region }} \
-      {{ gnocchi_service_type }} {{ item }} "{{ gnocchi_endpoint }}"
-  register: gnocchi_endpoint_create
-  changed_when: gnocchi_endpoint_create.rc == 0
-  failed_when: >
-    gnocchi_endpoint_create.rc != 0 and
-    'Conflict occurred' not in gnocchi_endpoint_create.stderr and
-    'Duplicate entry' not in gnocchi_endpoint_create.stderr
+    openstack endpoint list \
+      --service {{ gnocchi_service_name }} \
+      --interface {{ item }} \
+      --region {{ openstack_region }} \
+      -f value -c ID | head -n1
+  register: gnocchi_endpoint_check
+  changed_when: false
+  failed_when: false
   loop:
     - public
     - internal
     - admin
   run_once: true
   delegate_to: "{{ bootstrap_controller }}"
+
+- name: Create missing Gnocchi endpoints
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack endpoint create --region {{ openstack_region }} \
+      {{ gnocchi_service_type }} {{ item.item }} "{{ gnocchi_endpoint }}"
+  register: gnocchi_endpoint_create
+  changed_when: gnocchi_endpoint_create.rc == 0
+  failed_when: >
+    gnocchi_endpoint_create.rc != 0 and
+    'Conflict occurred' not in gnocchi_endpoint_create.stderr and
+    'Duplicate entry' not in gnocchi_endpoint_create.stderr
+  loop: "{{ gnocchi_endpoint_check.results }}"
+  when: item.stdout | trim == ""
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
 
 - name: Validate Ceph client.gnocchi keyring exists
   ansible.builtin.stat:
@@ -221,15 +244,24 @@
   delegate_to: "{{ bootstrap_controller }}"
 
 #- name: Run gnocchi-upgrade
-#  ansible.builtin.command: gnocchi-upgrade
+#  ansible.builtin.shell: |
+#    set -e
+#    timeout {{ gnocchi_upgrade_timeout }} gnocchi-upgrade --debug 2>&1 | tee /var/log/gnocchi/gnocchi-upgrade-ansible.log
+#  args:
+#    executable: /bin/bash
+#  become: true
 #  become_user: gnocchi
+#  register: gnocchi_upgrade_result
+#  changed_when: gnocchi_upgrade_result.rc == 0
+#  failed_when: gnocchi_upgrade_result.rc != 0
 #  when: not gnocchi_upgrade_marker.stat.exists
 #  run_once: true
 #  delegate_to: "{{ bootstrap_controller }}"
+
 - name: Run gnocchi-upgrade
   ansible.builtin.shell: |
     set -e
-    timeout {{ gnocchi_upgrade_timeout }} gnocchi-upgrade --debug 2>&1 | tee /var/log/gnocchi/gnocchi-upgrade-ansible.log
+    timeout {{ gnocchi_upgrade_timeout }} gnocchi-upgrade --sacks-number {{ gnocchi_sacks_number }} --debug 2>&1 | tee /var/log/gnocchi/gnocchi-upgrade-ansible.log
   args:
     executable: /bin/bash
   become: true

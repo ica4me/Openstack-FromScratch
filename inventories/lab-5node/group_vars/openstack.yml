@@ -187,6 +187,8 @@ gnocchi_rbd_user: gnocchi
 gnocchi_rbd_keyring: /etc/ceph/ceph.client.gnocchi.keyring
 gnocchi_rbd_ceph_conf: /etc/ceph/ceph.conf
 gnocchi_endpoint: "http://{{ vip_internal }}:8041"
+gnocchi_incoming_path: /var/lib/gnocchi
+gnocchi_sacks_number: 128
 
 aodh_service_user: aodh
 aodh_service_name: aodh

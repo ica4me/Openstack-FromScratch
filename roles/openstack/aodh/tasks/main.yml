@@ -149,7 +149,7 @@
   run_once: true
   delegate_to: "{{ bootstrap_controller }}"
 
-#- name: Ensure Aodh endpoints exist
+#- public- name: Ensure Aodh endpoints exist
 #  ansible.builtin.shell: |
 #    . {{ admin_openrc_path }}
 #    openstack endpoint create --region {{ openstack_region }} \
@@ -166,24 +166,40 @@
 #    - admin
 #  run_once: true
 #  delegate_to: "{{ bootstrap_controller }}"
-
-- name: Ensure Aodh endpoints exist
+- name: Check Aodh endpoints
   ansible.builtin.shell: |
     . {{ admin_openrc_path }}
-    openstack endpoint create --region {{ openstack_region }} \
-      {{ aodh_service_type }} {{ item }} "{{ aodh_endpoint }}"
-  register: aodh_endpoint_create
-  changed_when: aodh_endpoint_create.rc == 0
-  failed_when: >
-    aodh_endpoint_create.rc != 0 and
-    'Conflict occurred' not in aodh_endpoint_create.stderr and
-    'Duplicate entry' not in aodh_endpoint_create.stderr
+    openstack endpoint list \
+      --service {{ aodh_service_name }} \
+      --interface {{ item }} \
+      --region {{ openstack_region }} \
+      -f value -c ID | head -n1
+  register: aodh_endpoint_check
+  changed_when: false
+  failed_when: false
   loop:
     - public
     - internal
     - admin
   run_once: true
   delegate_to: "{{ bootstrap_controller }}"
+
+- name: Create missing Aodh endpoints
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack endpoint create --region {{ openstack_region }} \
+      {{ aodh_service_type }} {{ item.item }} "{{ aodh_endpoint }}"
+  register: aodh_endpoint_create
+  changed_when: aodh_endpoint_create.rc == 0
+  failed_when: >
+    aodh_endpoint_create.rc != 0 and
+    'Conflict occurred' not in aodh_endpoint_create.stderr and
+    'Duplicate entry' not in aodh_endpoint_create.stderr
+  loop: "{{ aodh_endpoint_check.results }}"
+  when: item.stdout | trim == ""
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
 
 - name: Deploy aodh.conf
   ansible.builtin.template:

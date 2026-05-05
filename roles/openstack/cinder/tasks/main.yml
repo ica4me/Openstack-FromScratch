@@ -128,23 +128,57 @@
   run_once: true
   delegate_to: "{{ bootstrap_controller }}"
 
-- name: Ensure Cinder endpoints exist
+#- name: Ensure Cinder endpoints exist
+#  ansible.builtin.shell: |
+#    . {{ admin_openrc_path }}
+#    openstack endpoint create --region {{ openstack_region }} \
+#      {{ cinder_service_type }} {{ item }} "{{ service_endpoints.cinder }}"
+#  register: cinder_endpoint_create
+#  changed_when: cinder_endpoint_create.rc == 0
+#  failed_when: >
+#    cinder_endpoint_create.rc != 0 and
+#    'Conflict occurred' not in cinder_endpoint_create.stderr and
+#    'Duplicate entry' not in cinder_endpoint_create.stderr
+#  loop:
+#    - public
+#    - internal
+#    - admin
+#  run_once: true
+#  delegate_to: "{{ bootstrap_controller }}"
+- name: Check Cinder endpoints
   ansible.builtin.shell: |
     . {{ admin_openrc_path }}
-    openstack endpoint create --region {{ openstack_region }} \
-      {{ cinder_service_type }} {{ item }} "{{ service_endpoints.cinder }}"
-  register: cinder_endpoint_create
-  changed_when: cinder_endpoint_create.rc == 0
-  failed_when: >
-    cinder_endpoint_create.rc != 0 and
-    'Conflict occurred' not in cinder_endpoint_create.stderr and
-    'Duplicate entry' not in cinder_endpoint_create.stderr
+    openstack endpoint list \
+      --service {{ cinder_service_name }} \
+      --interface {{ item }} \
+      --region {{ openstack_region }} \
+      -f value -c ID | head -n1
+  register: cinder_endpoint_check
+  changed_when: false
+  failed_when: false
   loop:
     - public
     - internal
     - admin
   run_once: true
   delegate_to: "{{ bootstrap_controller }}"
+
+- name: Create missing Cinder endpoints
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack endpoint create --region {{ openstack_region }} \
+      {{ cinder_service_type }} {{ item.item }} "{{ service_endpoints.cinder }}"
+  register: cinder_endpoint_create
+  changed_when: cinder_endpoint_create.rc == 0
+  failed_when: >
+    cinder_endpoint_create.rc != 0 and
+    'Conflict occurred' not in cinder_endpoint_create.stderr and
+    'Duplicate entry' not in cinder_endpoint_create.stderr
+  loop: "{{ cinder_endpoint_check.results }}"
+  when: item.stdout | trim == ""
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
 
 - name: Deploy cinder.conf
   ansible.builtin.template:

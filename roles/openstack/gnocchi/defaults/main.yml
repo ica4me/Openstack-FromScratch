@@ -13,11 +13,17 @@ gnocchi_packages:
 
 gnocchi_conf_path: /etc/gnocchi/gnocchi.conf
 gnocchi_state_path: /var/lib/gnocchi
-gnocchi_incoming_path: /var/lib/gnocchi/tmp
+
+# Penting:
+# Jangan set ke /var/lib/gnocchi/tmp.
+# Gnocchi file incoming driver akan memakai {{ gnocchi_incoming_path }}/tmp/gnocchi-config.
+gnocchi_incoming_path: /var/lib/gnocchi
+
 gnocchi_log_path: /var/log/gnocchi
 
 gnocchi_db_sync_marker: /var/lib/gnocchi/.upgraded
 gnocchi_upgrade_timeout: 900
+gnocchi_sacks_number: 128
 
 gnocchi_database_name: gnocchi
 gnocchi_database_user: gnocchi
@@ -35,7 +41,6 @@ gnocchi_api_bind_port: "{{ gnocchi_api_port }}"
 gnocchi_api_apache_site: gnocchi-api.conf
 gnocchi_api_service: apache2
 gnocchi_endpoint: "http://{{ internal_vip | default(vip_internal) }}:8041"
-gnocchi_coordination_url: "memcached://{{ internal_vip | default(vip_internal) }}:11211"
 
 gnocchi_metricd_workers: 4
 
@@ -44,7 +49,7 @@ gnocchi_rbd_user: gnocchi
 gnocchi_rbd_keyring: /etc/ceph/ceph.client.gnocchi.keyring
 gnocchi_rbd_ceph_conf: /etc/ceph/ceph.conf
 
-# API jalan via Apache, jadi service systemd yang dikelola hanya metricd.
+# API via Apache WSGI. Systemd yang dikelola hanya metricd.
 gnocchi_services:
   - gnocchi-metricd
 

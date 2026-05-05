@@ -3,6 +3,8 @@
 [DEFAULT]
 debug = false
 transport_url = {{ gnocchi_transport_url }}
+#coordination_url = memcached://{% for host in groups['controllers'] %}{{ hostvars[host].management_ip }}:11211{% if not loop.last %},{% endif %}{% endfor %}
+coordination_url = memcached://{{ internal_vip | default(vip_internal) }}:11211
 
 [api]
 auth_mode = keystone
@@ -22,8 +24,6 @@ ceph_pool = {{ gnocchi_rbd_pool }}
 ceph_username = {{ gnocchi_rbd_user }}
 ceph_keyring = {{ gnocchi_rbd_keyring }}
 ceph_conffile = {{ gnocchi_rbd_ceph_conf }}
-coordination_url = {{ gnocchi_coordination_url }}
-#coordination_url = memcached://{% for host in groups['controllers'] %}{{ hostvars[host].management_ip }}:11211{% if not loop.last %},{% endif %}{% endfor %}
 
 [metricd]
 workers = {{ gnocchi_metricd_workers }}
