@@ -1,0 +1,43 @@
+# Managed by Ansible - Aodh Alarming Service
+
+[DEFAULT]
+debug = false
+transport_url = {{ aodh_transport_url }}
+auth_strategy = keystone
+log_dir = /var/log/aodh
+
+[database]
+connection = mysql+pymysql://{{ aodh_database_user }}:{{ aodh_db_password }}@{{ db_host }}/{{ aodh_database_name }}
+
+[api]
+host = {{ aodh_api_bind_host }}
+port = {{ aodh_api_bind_port }}
+
+[keystone_authtoken]
+www_authenticate_uri = {{ service_endpoints.keystone | regex_replace('/v3$', '') }}
+auth_url = {{ service_endpoints.keystone }}
+memcached_servers = {{ aodh_memcached_servers }}
+auth_type = password
+project_domain_name = {{ openstack_domain }}
+user_domain_name = {{ openstack_domain }}
+project_name = service
+username = {{ aodh_service_user }}
+password = {{ aodh_service_password }}
+service_token_roles_required = true
+
+[service_credentials]
+auth_url = {{ service_endpoints.keystone }}
+auth_type = password
+project_domain_name = {{ openstack_domain }}
+user_domain_name = {{ openstack_domain }}
+project_name = service
+username = {{ aodh_service_user }}
+password = {{ aodh_service_password }}
+interface = internalURL
+region_name = {{ openstack_region }}
+
+[oslo_messaging_notifications]
+driver = messagingv2
+
+[oslo_policy]
+enforce_scope = false

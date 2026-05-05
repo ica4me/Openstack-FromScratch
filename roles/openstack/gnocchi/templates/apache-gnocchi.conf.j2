@@ -1,0 +1,35 @@
+# Managed by Ansible - Gnocchi API WSGI backend
+# Apache hanya listen di management IP. HAProxy listen di VIP.
+
+Listen {{ management_ip }}:{{ gnocchi_api_port }}
+
+<VirtualHost {{ management_ip }}:{{ gnocchi_api_port }}>
+    ServerName {{ internal_fqdn | default('openstack-api.internal') }}
+
+    WSGIDaemonProcess gnocchi-api \
+        processes=4 \
+        threads=1 \
+        user=gnocchi \
+        group=gnocchi \
+        display-name=%{GROUP}
+
+    WSGIProcessGroup gnocchi-api
+    WSGIApplicationGroup %{GLOBAL}
+
+    WSGIImportScript /usr/bin/gnocchi-api \
+        process-group=gnocchi-api \
+        application-group=%{GLOBAL}
+
+    WSGIScriptAlias / /usr/bin/gnocchi-api \
+        process-group=gnocchi-api \
+        application-group=%{GLOBAL}
+
+    WSGIPassAuthorization On
+
+    ErrorLog /var/log/apache2/gnocchi_error.log
+    CustomLog /var/log/apache2/gnocchi_access.log combined
+
+    <Directory /usr/bin>
+        Require all granted
+    </Directory>
+</VirtualHost>

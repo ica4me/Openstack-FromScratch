@@ -1,0 +1,44 @@
+# Managed by Ansible - Gnocchi Metric Service
+
+[DEFAULT]
+debug = false
+transport_url = {{ gnocchi_transport_url }}
+
+[api]
+auth_mode = keystone
+host = {{ gnocchi_api_bind_host }}
+port = {{ gnocchi_api_bind_port }}
+
+[indexer]
+url = mysql+pymysql://{{ gnocchi_database_user }}:{{ gnocchi_db_password }}@{{ db_host }}/{{ gnocchi_database_name }}
+
+[incoming]
+driver = file
+file_basepath = {{ gnocchi_incoming_path }}
+
+[storage]
+driver = ceph
+ceph_pool = {{ gnocchi_rbd_pool }}
+ceph_username = {{ gnocchi_rbd_user }}
+ceph_keyring = {{ gnocchi_rbd_keyring }}
+ceph_conffile = {{ gnocchi_rbd_ceph_conf }}
+coordination_url = {{ gnocchi_coordination_url }}
+#coordination_url = memcached://{% for host in groups['controllers'] %}{{ hostvars[host].management_ip }}:11211{% if not loop.last %},{% endif %}{% endfor %}
+
+[metricd]
+workers = {{ gnocchi_metricd_workers }}
+
+[keystone_authtoken]
+www_authenticate_uri = {{ service_endpoints.keystone | regex_replace('/v3$', '') }}
+auth_url = {{ service_endpoints.keystone }}
+memcached_servers = {{ gnocchi_memcached_servers }}
+auth_type = password
+project_domain_name = {{ openstack_domain }}
+user_domain_name = {{ openstack_domain }}
+project_name = service
+username = {{ gnocchi_service_user }}
+password = {{ gnocchi_service_password }}
+service_token_roles_required = true
+
+[oslo_policy]
+enforce_scope = false

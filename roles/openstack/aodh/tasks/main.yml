@@ -1,0 +1,307 @@
+---
+- name: Assert Aodh variables exist
+  ansible.builtin.assert:
+    that:
+      - aodh_db_password is defined
+      - aodh_service_password is defined
+      - aodh_endpoint is defined
+      - service_endpoints.keystone is defined
+      - aodh_transport_url is defined
+    fail_msg: "Variabel Aodh belum lengkap."
+
+- name: Install Aodh packages
+  ansible.builtin.apt:
+    name: "{{ aodh_packages }}"
+    state: present
+    update_cache: false
+  retries: 3
+  delay: 10
+  register: aodh_pkg_result
+  until: aodh_pkg_result is succeeded
+
+- name: Ensure Aodh directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: aodh
+    group: aodh
+    mode: "0755"
+  loop:
+    - /var/lib/aodh
+    - /var/log/aodh
+
+- name: Ensure Aodh database exists
+  community.mysql.mysql_db:
+    name: "{{ aodh_database_name }}"
+    state: present
+    login_user: root
+    login_password: "{{ vault_mysql_root_password }}"
+    login_unix_socket: /run/mysqld/mysqld.sock
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Ensure Aodh database user exists
+  community.mysql.mysql_user:
+    name: "{{ aodh_database_user }}"
+    password: "{{ aodh_db_password }}"
+    host: "{{ item }}"
+    priv: "{{ aodh_database_name }}.*:ALL"
+    state: present
+    login_user: root
+    login_password: "{{ vault_mysql_root_password }}"
+    login_unix_socket: /run/mysqld/mysqld.sock
+  loop:
+    - "%"
+    - localhost
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Check Aodh service user
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack user show {{ aodh_service_user }} --domain {{ openstack_domain }} -f value -c id
+  register: aodh_user_check
+  changed_when: false
+  failed_when: false
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+#- name: Create Aodh service user
+#  ansible.builtin.shell: |
+#    . {{ admin_openrc_path }}
+#    openstack user create {{ aodh_service_user }} \
+#      --domain {{ openstack_domain }} \
+#      --password '{{ aodh_service_password }}'
+#  when: aodh_user_check.rc != 0
+#  run_once: true
+#  delegate_to: "{{ bootstrap_controller }}"
+- name: Create Aodh service user
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack user create {{ aodh_service_user }} \
+      --domain {{ openstack_domain }} \
+      --password '{{ aodh_service_password }}'
+  register: aodh_user_create
+  changed_when: aodh_user_create.rc == 0
+  failed_when: >
+    aodh_user_create.rc != 0 and
+    'Conflict occurred' not in aodh_user_create.stderr and
+    'Duplicate entry' not in aodh_user_create.stderr
+  when: aodh_user_check.rc != 0
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Re-check Aodh service user after create
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack user show {{ aodh_service_user }} --domain {{ openstack_domain }} -f value -c id
+  register: aodh_user_recheck
+  changed_when: false
+  failed_when: aodh_user_recheck.rc != 0
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Assign admin role to Aodh service user
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack role add --project service --user {{ aodh_service_user }} admin
+  register: aodh_role_add
+  changed_when: aodh_role_add.rc == 0
+  failed_when: aodh_role_add.rc != 0 and 'Conflict occurred' not in aodh_role_add.stderr
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Check Aodh service catalog
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack service show {{ aodh_service_name }} -f value -c id
+  register: aodh_service_check
+  changed_when: false
+  failed_when: false
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+#- name: Create Aodh alarming service
+#  ansible.builtin.shell: |
+#    . {{ admin_openrc_path }}
+#    openstack service create \
+#      --name {{ aodh_service_name }} \
+#      --description "{{ aodh_service_description }}" \
+#      {{ aodh_service_type }}
+#  when: aodh_service_check.rc != 0
+#  run_once: true
+#  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Create Aodh alarming service
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack service create \
+      --name {{ aodh_service_name }} \
+      --description "{{ aodh_service_description }}" \
+      {{ aodh_service_type }}
+  register: aodh_service_create
+  changed_when: aodh_service_create.rc == 0
+  failed_when: >
+    aodh_service_create.rc != 0 and
+    'Conflict occurred' not in aodh_service_create.stderr and
+    'Duplicate entry' not in aodh_service_create.stderr
+  when: aodh_service_check.rc != 0
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+#- name: Ensure Aodh endpoints exist
+#  ansible.builtin.shell: |
+#    . {{ admin_openrc_path }}
+#    openstack endpoint create --region {{ openstack_region }} \
+#      {{ aodh_service_type }} {{ item }} "{{ aodh_endpoint }}"
+#  register: aodh_endpoint_create
+#  changed_when: aodh_endpoint_create.rc == 0
+#  failed_when: >
+#    aodh_endpoint_create.rc != 0 and
+#    'Conflict occurred' not in aodh_endpoint_create.stderr and
+#    'Duplicate entry' not in aodh_endpoint_create.stderr
+#  loop:
+#    - public
+#    - internal
+#    - admin
+#  run_once: true
+#  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Ensure Aodh endpoints exist
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack endpoint create --region {{ openstack_region }} \
+      {{ aodh_service_type }} {{ item }} "{{ aodh_endpoint }}"
+  register: aodh_endpoint_create
+  changed_when: aodh_endpoint_create.rc == 0
+  failed_when: >
+    aodh_endpoint_create.rc != 0 and
+    'Conflict occurred' not in aodh_endpoint_create.stderr and
+    'Duplicate entry' not in aodh_endpoint_create.stderr
+  loop:
+    - public
+    - internal
+    - admin
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Deploy aodh.conf
+  ansible.builtin.template:
+    src: aodh.conf.j2
+    dest: "{{ aodh_conf_path }}"
+    owner: root
+    group: aodh
+    mode: "0640"
+    backup: true
+  notify:
+    - Restart Aodh services
+    - Restart Aodh API
+
+- name: Stop and disable standalone Aodh API service if present
+  ansible.builtin.service:
+    name: aodh-api
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Disable packaged Aodh Apache config if present
+  ansible.builtin.command: a2disconf aodh-api
+  changed_when: false
+  failed_when: false
+
+- name: Disable packaged Aodh Apache site if present
+  ansible.builtin.command: a2dissite aodh-api.conf
+  changed_when: false
+  failed_when: false
+
+- name: Remove old Aodh Apache enabled symlink
+  ansible.builtin.file:
+    path: /etc/apache2/sites-enabled/aodh-api.conf
+    state: absent
+
+- name: Deploy Aodh Apache WSGI site
+  ansible.builtin.template:
+    src: apache-aodh.conf.j2
+    dest: /etc/apache2/sites-available/aodh-api.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  notify: Restart Aodh API
+
+- name: Enable Aodh Apache WSGI site
+  ansible.builtin.command: a2ensite aodh-api.conf
+  args:
+    creates: /etc/apache2/sites-enabled/aodh-api.conf
+  notify: Restart Aodh API
+
+- name: Validate Apache config after Aodh site
+  ansible.builtin.command: apache2ctl configtest
+  changed_when: false
+
+- name: Check Aodh DB sync marker
+  ansible.builtin.stat:
+    path: "{{ aodh_db_sync_marker }}"
+  register: aodh_db_sync_marker_stat
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Sync Aodh database
+  ansible.builtin.command: aodh-dbsync
+  become_user: aodh
+  when: not aodh_db_sync_marker_stat.stat.exists
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Create Aodh DB sync marker
+  ansible.builtin.file:
+    path: "{{ aodh_db_sync_marker }}"
+    state: touch
+    owner: aodh
+    group: aodh
+    mode: "0600"
+  when: not aodh_db_sync_marker_stat.stat.exists
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Flush handlers before Aodh validation
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure Aodh services are enabled and started
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop: "{{ aodh_services }}"
+
+- name: Ensure Apache for Aodh API is enabled and started
+  ansible.builtin.service:
+    name: "{{ aodh_api_service | default('apache2') }}"
+    state: started
+    enabled: true
+
+- name: Validate local Aodh API on each controller
+  ansible.builtin.uri:
+    url: "http://{{ aodh_api_bind_host }}:{{ aodh_api_bind_port }}"
+    method: GET
+    status_code: [200, 300, 401, 403]
+    timeout: 15
+    return_content: false
+  register: aodh_api_local_check
+  until: aodh_api_local_check.status in [200, 300, 401, 403]
+  retries: 20
+  delay: 6
+
+- name: Validate Aodh API through VIP
+  ansible.builtin.uri:
+    url: "{{ aodh_endpoint }}"
+    method: GET
+    status_code: [200, 300, 401, 403]
+    timeout: 15
+    return_content: false
+  register: aodh_api_vip_check
+  until: aodh_api_vip_check.status in [200, 300, 401, 403]
+  retries: 20
+  delay: 6
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"

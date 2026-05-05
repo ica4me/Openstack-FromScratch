@@ -12,6 +12,8 @@
     name: "{{ horizon_packages }}"
     state: present
     update_cache: true
+    cache_valid_time: 3600
+    lock_timeout: 300
   retries: 3
   delay: 10
   register: horizon_pkg_result

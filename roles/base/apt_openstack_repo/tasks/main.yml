@@ -7,6 +7,8 @@
       - python3-apt
     state: present
     update_cache: true
+    cache_valid_time: 3600
+    lock_timeout: 300
 
 - name: Check whether Ubuntu Cloud Archive Caracal source already exists
   ansible.builtin.shell: |
@@ -22,6 +24,8 @@
 - name: Update apt cache after enabling Ubuntu Cloud Archive
   ansible.builtin.apt:
     update_cache: true
+    cache_valid_time: 3600
+    lock_timeout: 300
   retries: 3
   delay: 10
   register: apt_update_after_uca
@@ -31,6 +35,8 @@
   ansible.builtin.apt:
     upgrade: dist
     update_cache: true
+    cache_valid_time: 3600
+    lock_timeout: 300
   register: apt_dist_upgrade
   retries: 3
   delay: 10

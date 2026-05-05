@@ -1,0 +1,18 @@
+---
+- name: Restart Ceilometer controller services
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: restarted
+  loop: "{{ ceilometer_services_controller | default([]) }}"
+  when:
+    - inventory_hostname in groups['controllers']
+    - (ceilometer_services_controller | default([])) | length > 0
+
+- name: Restart Ceilometer compute services
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: restarted
+  loop: "{{ ceilometer_services_compute | default([]) }}"
+  when:
+    - inventory_hostname in groups['computes']
+    - (ceilometer_services_compute | default([])) | length > 0

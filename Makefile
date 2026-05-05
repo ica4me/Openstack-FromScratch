@@ -73,3 +73,5 @@ cinder:
 	ansible-playbook -i $(INV) playbooks/11-cinder.yml
 horizon:
 	ansible-playbook -i $(INV) playbooks/12-horizon.yml
+telemetry:
+	ansible-playbook -i $(INV) playbooks/13-telemetry.yml

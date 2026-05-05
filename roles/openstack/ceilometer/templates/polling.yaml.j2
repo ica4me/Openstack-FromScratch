@@ -1,0 +1,19 @@
+---
+sources:
+  - name: some_pollsters
+    interval: 300
+    meters:
+      - cpu
+      - disk.*
+      - image.*
+      - ip.*
+      - memory
+      - network.*
+      - perf.*
+      - port
+      - port.*
+      - switch
+      - switch.*
+      - volume.*
+    resources:
+      - "*"

@@ -1,0 +1,311 @@
+---
+- name: Assert Gnocchi variables exist
+  ansible.builtin.assert:
+    that:
+      - gnocchi_db_password is defined
+      - gnocchi_service_password is defined
+      - gnocchi_endpoint is defined
+      - service_endpoints.keystone is defined
+      - gnocchi_rbd_pool is defined
+      - gnocchi_rbd_keyring is defined
+    fail_msg: "Variabel Gnocchi belum lengkap."
+
+#- name: Install Gnocchi packages
+#  ansible.builtin.apt:
+#    name: "{{ gnocchi_packages }}"
+#    state: present
+#    update_cache: true
+#  retries: 3
+#  delay: 10
+#  register: gnocchi_pkg_result
+#  until: gnocchi_pkg_result is succeeded
+
+- name: Install Gnocchi packages
+  ansible.builtin.apt:
+    name: "{{ gnocchi_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    lock_timeout: 300
+  retries: 3
+  delay: 10
+  register: gnocchi_pkg_result
+  until: gnocchi_pkg_result is succeeded
+
+
+#- name: Ensure Gnocchi directories exist
+#  ansible.builtin.file:
+#    path: "{{ item }}"
+#    state: directory
+#    owner: gnocchi
+#    group: gnocchi
+#    mode: "0755"
+#  loop:
+#    - /var/lib/gnocchi
+#    - /var/lib/gnocchi/coordination
+#    - /var/log/gnocchi
+- name: Ensure Gnocchi directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: gnocchi
+    group: gnocchi
+    mode: "0755"
+  loop:
+    - "{{ gnocchi_state_path }}"
+    - "{{ gnocchi_incoming_path }}"
+    - "{{ gnocchi_log_path }}"
+
+
+- name: Ensure Gnocchi database exists
+  community.mysql.mysql_db:
+    name: "{{ gnocchi_database_name }}"
+    state: present
+    login_user: root
+    login_password: "{{ vault_mysql_root_password }}"
+    login_unix_socket: /run/mysqld/mysqld.sock
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Ensure Gnocchi database user exists
+  community.mysql.mysql_user:
+    name: "{{ gnocchi_database_user }}"
+    password: "{{ gnocchi_db_password }}"
+    host: "{{ item }}"
+    priv: "{{ gnocchi_database_name }}.*:ALL"
+    state: present
+    login_user: root
+    login_password: "{{ vault_mysql_root_password }}"
+    login_unix_socket: /run/mysqld/mysqld.sock
+  loop:
+    - "%"
+    - localhost
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Check Gnocchi service user
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack user show {{ gnocchi_service_user }} --domain {{ openstack_domain }} -f value -c id
+  register: gnocchi_user_check
+  changed_when: false
+  failed_when: false
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Create Gnocchi service user
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack user create {{ gnocchi_service_user }} \
+      --domain {{ openstack_domain }} \
+      --password '{{ gnocchi_service_password }}'
+  when: gnocchi_user_check.rc != 0
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Assign admin role to Gnocchi service user
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack role add --project service --user {{ gnocchi_service_user }} admin
+  register: gnocchi_role_add
+  changed_when: gnocchi_role_add.rc == 0
+  failed_when: gnocchi_role_add.rc != 0 and 'Conflict occurred' not in gnocchi_role_add.stderr
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Check Gnocchi service catalog
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack service show {{ gnocchi_service_name }} -f value -c id
+  register: gnocchi_service_check
+  changed_when: false
+  failed_when: false
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Create Gnocchi metric service
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack service create \
+      --name {{ gnocchi_service_name }} \
+      --description "{{ gnocchi_service_description }}" \
+      {{ gnocchi_service_type }}
+  when: gnocchi_service_check.rc != 0
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Ensure Gnocchi endpoints exist
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack endpoint create --region {{ openstack_region }} \
+      {{ gnocchi_service_type }} {{ item }} "{{ gnocchi_endpoint }}"
+  register: gnocchi_endpoint_create
+  changed_when: gnocchi_endpoint_create.rc == 0
+  failed_when: >
+    gnocchi_endpoint_create.rc != 0 and
+    'Conflict occurred' not in gnocchi_endpoint_create.stderr and
+    'Duplicate entry' not in gnocchi_endpoint_create.stderr
+  loop:
+    - public
+    - internal
+    - admin
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Validate Ceph client.gnocchi keyring exists
+  ansible.builtin.stat:
+    path: "{{ gnocchi_rbd_keyring }}"
+  register: gnocchi_keyring_stat
+
+- name: Assert Ceph client.gnocchi keyring exists
+  ansible.builtin.assert:
+    that:
+      - gnocchi_keyring_stat.stat.exists
+      - gnocchi_keyring_stat.stat.size | int > 0
+    fail_msg: "{{ gnocchi_rbd_keyring }} tidak ada/kosong. Buat client.gnocchi di Ceph dan salin keyring dulu."
+
+- name: Validate Gnocchi can access Ceph metrics pool
+  ansible.builtin.command: "rbd -p {{ gnocchi_rbd_pool }} ls --id {{ gnocchi_rbd_user }}"
+  changed_when: false
+
+- name: Deploy gnocchi.conf
+  ansible.builtin.template:
+    src: gnocchi.conf.j2
+    dest: "{{ gnocchi_conf_path }}"
+    owner: root
+    group: gnocchi
+    mode: "0640"
+    backup: true
+  notify: Restart Gnocchi services
+
+- name: Disable packaged Gnocchi Apache config if present
+  ansible.builtin.command: a2disconf gnocchi-api
+  changed_when: false
+  failed_when: false
+
+- name: Remove old Gnocchi Apache site symlink
+  ansible.builtin.file:
+    path: /etc/apache2/sites-enabled/gnocchi-api.conf
+    state: absent
+
+- name: Deploy Gnocchi Apache WSGI site
+  ansible.builtin.template:
+    src: apache-gnocchi.conf.j2
+    dest: /etc/apache2/sites-available/gnocchi-api.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Apache for Gnocchi API
+
+- name: Enable Gnocchi Apache WSGI site
+  ansible.builtin.command: a2ensite gnocchi-api.conf
+  args:
+    creates: /etc/apache2/sites-enabled/gnocchi-api.conf
+  notify: Restart Apache for Gnocchi API
+
+- name: Validate Apache config after Gnocchi site
+  ansible.builtin.command: apache2ctl configtest
+  changed_when: false
+
+- name: Stop Gnocchi metricd before upgrade
+  ansible.builtin.service:
+    name: gnocchi-metricd
+    state: stopped
+  failed_when: false
+
+- name: Check Gnocchi upgrade marker
+  ansible.builtin.stat:
+    path: "{{ gnocchi_db_sync_marker }}"
+  register: gnocchi_upgrade_marker
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+#- name: Run gnocchi-upgrade
+#  ansible.builtin.command: gnocchi-upgrade
+#  become_user: gnocchi
+#  when: not gnocchi_upgrade_marker.stat.exists
+#  run_once: true
+#  delegate_to: "{{ bootstrap_controller }}"
+- name: Run gnocchi-upgrade
+  ansible.builtin.shell: |
+    set -e
+    timeout {{ gnocchi_upgrade_timeout }} gnocchi-upgrade --debug 2>&1 | tee /var/log/gnocchi/gnocchi-upgrade-ansible.log
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: gnocchi
+  register: gnocchi_upgrade_result
+  changed_when: gnocchi_upgrade_result.rc == 0
+  failed_when: gnocchi_upgrade_result.rc != 0
+  when: not gnocchi_upgrade_marker.stat.exists
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Print gnocchi-upgrade output
+  ansible.builtin.debug:
+    var: gnocchi_upgrade_result.stdout_lines
+  when:
+    - gnocchi_upgrade_result is defined
+    - gnocchi_upgrade_result.stdout_lines is defined
+  run_once: true
+
+
+- name: Create Gnocchi upgrade marker
+  ansible.builtin.file:
+    path: "{{ gnocchi_db_sync_marker }}"
+    state: touch
+    owner: gnocchi
+    group: gnocchi
+    mode: "0600"
+  when: not gnocchi_upgrade_marker.stat.exists
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Flush handlers before validation
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure Gnocchi services are enabled and started
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop: "{{ gnocchi_services }}"
+
+- name: Wait for Gnocchi API port
+  ansible.builtin.wait_for:
+    host: "{{ gnocchi_api_bind_host }}"
+    port: "{{ gnocchi_api_bind_port }}"
+    timeout: 90
+
+#- name: Validate Gnocchi API through VIP
+#  ansible.builtin.uri:
+#    url: "{{ gnocchi_endpoint }}"
+#    status_code: [200, 300, 401, 403]
+#  run_once: true
+#  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Validate local Gnocchi API on each controller
+  ansible.builtin.uri:
+    url: "http://{{ management_ip }}:{{ gnocchi_api_bind_port }}"
+    method: GET
+    status_code: [200, 300, 401, 403]
+    timeout: 15
+    return_content: false
+  register: gnocchi_api_local_check
+  until: gnocchi_api_local_check.status in [200, 300, 401, 403]
+  retries: 20
+  delay: 6
+
+- name: Validate Gnocchi API through VIP
+  ansible.builtin.uri:
+    url: "{{ gnocchi_endpoint }}"
+    method: GET
+    status_code: [200, 300, 401, 403]
+    timeout: 15
+    return_content: false
+  register: gnocchi_api_vip_check
+  until: gnocchi_api_vip_check.status in [200, 300, 401, 403]
+  retries: 20
+  delay: 6
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"

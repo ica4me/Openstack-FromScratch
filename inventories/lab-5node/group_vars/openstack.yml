@@ -167,3 +167,39 @@ nova_state_path: /var/lib/nova
 nova_instances_path: /var/lib/nova/instances
 
 nova_discover_hosts_interval: 300
+
+
+###
+# Telemetry endpoints
+gnocchi_api_port: 8041
+aodh_api_port: 8042
+
+gnocchi_service_user: gnocchi
+gnocchi_service_name: gnocchi
+gnocchi_service_type: metric
+gnocchi_service_description: "OpenStack Metric Service"
+gnocchi_database_name: gnocchi
+gnocchi_database_user: gnocchi
+gnocchi_db_password: "{{ vault_gnocchi_db_password }}"
+gnocchi_service_password: "{{ vault_gnocchi_service_password }}"
+gnocchi_rbd_pool: metrics
+gnocchi_rbd_user: gnocchi
+gnocchi_rbd_keyring: /etc/ceph/ceph.client.gnocchi.keyring
+gnocchi_rbd_ceph_conf: /etc/ceph/ceph.conf
+gnocchi_endpoint: "http://{{ vip_internal }}:8041"
+
+aodh_service_user: aodh
+aodh_service_name: aodh
+aodh_service_type: alarming
+aodh_service_description: "OpenStack Alarming Service"
+aodh_database_name: aodh
+aodh_database_user: aodh
+aodh_db_password: "{{ vault_aodh_db_password }}"
+aodh_service_password: "{{ vault_aodh_service_password }}"
+aodh_endpoint: "http://{{ vip_internal }}:8042"
+
+ceilometer_service_user: ceilometer
+ceilometer_service_name: ceilometer
+ceilometer_service_type: metering
+ceilometer_service_description: "OpenStack Telemetry Service"
+ceilometer_service_password: "{{ vault_ceilometer_service_password }}"

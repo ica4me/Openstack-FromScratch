@@ -11,7 +11,7 @@
   ansible.builtin.apt:
     name: "{{ haproxy_package }}"
     state: present
-    update_cache: true
+    lock_timeout: 300
 
 - name: Ensure HAProxy can bind to non-local VIP
   ansible.posix.sysctl:

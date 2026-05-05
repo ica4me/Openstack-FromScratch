@@ -1,0 +1,62 @@
+---
+- name: Phase 13a - Gnocchi metric service
+  hosts: controllers
+  become: true
+  gather_facts: true
+  roles:
+    - role: openstack/gnocchi
+
+- name: Phase 13b - Aodh alarming service
+  hosts: controllers
+  become: true
+  gather_facts: true
+  roles:
+    - role: openstack/aodh
+
+- name: Phase 13c.1 - Ceilometer telemetry data collection on controllers
+  hosts: controllers
+  become: true
+  gather_facts: true
+  roles:
+    - role: openstack/ceilometer
+
+- name: Phase 13c.2 - Ceilometer telemetry data collection on computes
+  hosts: computes
+  become: true
+  gather_facts: true
+  roles:
+    - role: openstack/ceilometer
+
+- name: Phase 13d - Telemetry validation
+  hosts: "{{ groups['controllers'][0] }}"
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Validate Keystone API through VIP
+      ansible.builtin.uri:
+        url: "{{ service_endpoints.keystone }}"
+        method: GET
+        status_code: [200, 300]
+        timeout: 10
+
+    - name: Validate Gnocchi API through VIP
+      ansible.builtin.uri:
+        url: "{{ gnocchi_endpoint | default('http://' ~ (internal_vip | default(vip_internal)) ~ ':8041') }}"
+        method: GET
+        status_code: [200, 300, 401, 403]
+        timeout: 15
+
+    - name: Validate Aodh API through VIP
+      ansible.builtin.uri:
+        url: "{{ aodh_endpoint | default('http://' ~ (internal_vip | default(vip_internal)) ~ ':8042') }}"
+        method: GET
+        status_code: [200, 300, 401, 403]
+        timeout: 15
+
+    - name: Print Telemetry phase summary
+      ansible.builtin.debug:
+        msg:
+          - "Telemetry phase completed."
+          - "Gnocchi endpoint: {{ gnocchi_endpoint | default('http://' ~ (internal_vip | default(vip_internal)) ~ ':8041') }}"
+          - "Aodh endpoint: {{ aodh_endpoint | default('http://' ~ (internal_vip | default(vip_internal)) ~ ':8042') }}"
+          - "Ceilometer: agent-based, no Apache API endpoint."

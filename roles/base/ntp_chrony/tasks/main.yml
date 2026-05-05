@@ -4,6 +4,8 @@
     name: "{{ chrony_package }}"
     state: present
     update_cache: true
+    cache_valid_time: 3600
+    lock_timeout: 300
 
 - name: Configure chrony
   ansible.builtin.template:

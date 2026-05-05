@@ -1,0 +1,39 @@
+---
+ceilometer_packages_controller:
+  - ceilometer-agent-notification
+  - ceilometer-agent-central
+  - python3-pymysql
+
+ceilometer_packages_compute:
+  - ceilometer-agent-compute
+
+ceilometer_conf_path: /etc/ceilometer/ceilometer.conf
+ceilometer_pipeline_path: /etc/ceilometer/pipeline.yaml
+ceilometer_polling_path: /etc/ceilometer/polling.yaml
+
+ceilometer_service_user: ceilometer
+ceilometer_service_password: "{{ vault_ceilometer_service_password }}"
+
+ceilometer_services_controller:
+  - ceilometer-agent-notification
+  - ceilometer-agent-central
+
+ceilometer_services_compute:
+  - ceilometer-agent-compute
+
+admin_openrc_path: /root/admin-openrc
+bootstrap_controller: "{{ groups['controllers'][0] }}"
+openstack_domain: Default
+openstack_region: RegionOne
+
+rabbitmq_openstack_user: openstack
+rabbitmq_openstack_password: "{{ vault_rabbitmq_openstack_password }}"
+ceilometer_transport_url: "rabbit://{% for host in groups['controllers'] %}{{ rabbitmq_openstack_user }}:{{ rabbitmq_openstack_password }}@{{ hostvars[host].management_ip }}:5672{% if not loop.last %},{% endif %}{% endfor %}/"
+
+ceilometer_memcached_servers: >-
+  {{ groups['controllers']
+     | map('extract', hostvars, 'management_ip')
+     | map('regex_replace', '$', ':11211')
+     | join(',') }}
+
+ceilometer_gnocchi_url: "{{ gnocchi_endpoint | default('http://' ~ (internal_vip | default(vip_internal)) ~ ':8041') }}"

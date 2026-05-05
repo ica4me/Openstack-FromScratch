@@ -1,0 +1,525 @@
+- Enabled: true
+  ID: 0004118e852e48bfa9fbbf039a9e3b88
+  Interface: admin
+  Region: RegionOne
+  Service Name: cinder
+  Service Type: volumev3
+  URL: http://172.16.2.200:8776/v3/%(project_id)s
+- Enabled: true
+  ID: 0774dbc99e36423b9abe6d8faa618244
+  Interface: public
+  Region: RegionOne
+  Service Name: keystone
+  Service Type: identity
+  URL: http://openstack-api.internal:5000/v3
+- Enabled: true
+  ID: 07b8913804b34cbbba2829ac9efd7696
+  Interface: public
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 07f58fb4d7144062847d4a3a01e03dd5
+  Interface: public
+  Region: RegionOne
+  Service Name: nova
+  Service Type: compute
+  URL: http://openstack-api.internal:8774/v2.1
+- Enabled: true
+  ID: 195e7b8f20a943a0adea628f35767e3c
+  Interface: admin
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 1d54ca329adf4527b48233530ea6be8c
+  Interface: admin
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 1e0224a3f5fc4ac8b7be08e9d6c8e380
+  Interface: admin
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 1f4bfd93d0fb446f873aa0ea085c8395
+  Interface: public
+  Region: RegionOne
+  Service Name: cinder
+  Service Type: volumev3
+  URL: http://172.16.2.200:8776/v3/%(project_id)s
+- Enabled: true
+  ID: 227789f8bda5493992c8b7cb8f4b96b4
+  Interface: public
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 2a76c71d3a8148e280d83e11cc5ee739
+  Interface: internal
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 2dad225351df4cd9a09c46dce6337525
+  Interface: internal
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 2f81a990008846918de088f3b0bda0e5
+  Interface: internal
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 305f3b0e9d4d46acaa796ff34ab2c3dd
+  Interface: internal
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 30983335d4d44046bb64d84096c9225a
+  Interface: admin
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 33ab8833697f4743840fb0e9e340b926
+  Interface: internal
+  Region: RegionOne
+  Service Name: neutron
+  Service Type: network
+  URL: http://172.16.2.200:9696
+- Enabled: true
+  ID: 38af033dea894a209357e3937336e3f2
+  Interface: admin
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 38e760ec60f84e73ae45e40b7b72cfb1
+  Interface: admin
+  Region: RegionOne
+  Service Name: neutron
+  Service Type: network
+  URL: http://172.16.2.200:9696
+- Enabled: true
+  ID: 3a42631e6da04560b8f06621ffa4bed8
+  Interface: public
+  Region: RegionOne
+  Service Name: cinder
+  Service Type: volumev3
+  URL: http://172.16.2.200:8776/v3/%(project_id)s
+- Enabled: true
+  ID: 3df97b2984cc4ae2ac1b6135147f2b24
+  Interface: internal
+  Region: RegionOne
+  Service Name: aodh
+  Service Type: alarming
+  URL: http://172.16.2.200:8042
+- Enabled: true
+  ID: 408cc7a6b1ee4e6f98abf7d0669fbf0f
+  Interface: internal
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 466719829cc04552aec463efcdb1bce1
+  Interface: internal
+  Region: RegionOne
+  Service Name: cinder
+  Service Type: volumev3
+  URL: http://172.16.2.200:8776/v3/%(project_id)s
+- Enabled: true
+  ID: 47e5c01b4ca747529339b07fc3b89af6
+  Interface: admin
+  Region: RegionOne
+  Service Name: glance
+  Service Type: image
+  URL: http://openstack-api.internal:9292
+- Enabled: true
+  ID: 4942745eb2134b3b998722182505478a
+  Interface: internal
+  Region: RegionOne
+  Service Name: cinder
+  Service Type: volumev3
+  URL: http://172.16.2.200:8776/v3/%(project_id)s
+- Enabled: true
+  ID: 4a3530cd1e5a415892f3ccc4b998af81
+  Interface: public
+  Region: RegionOne
+  Service Name: cinder
+  Service Type: volumev3
+  URL: http://172.16.2.200:8776/v3/%(project_id)s
+- Enabled: true
+  ID: 4e4bc97d7601451da68cab88c173eafe
+  Interface: public
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 528afe9ac8f642e2bc0497e6dc38d1c0
+  Interface: admin
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 52ebc0bb1b03467a91d75a879f577ba2
+  Interface: internal
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 576393cc6ae842f397b1d3c43c9af75d
+  Interface: internal
+  Region: RegionOne
+  Service Name: cinder
+  Service Type: volumev3
+  URL: http://172.16.2.200:8776/v3/%(project_id)s
+- Enabled: true
+  ID: 5c194da0031d403ca5c039289777ed87
+  Interface: public
+  Region: RegionOne
+  Service Name: cinder
+  Service Type: volumev3
+  URL: http://172.16.2.200:8776/v3/%(project_id)s
+- Enabled: true
+  ID: 5daa8a0503e6456fb96c12be2adf0eb7
+  Interface: internal
+  Region: RegionOne
+  Service Name: aodh
+  Service Type: alarming
+  URL: http://172.16.2.200:8042
+- Enabled: true
+  ID: 62ab08a5df2645dc956cfab3694a5cd4
+  Interface: internal
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 62b12cb88ab1499495e1acbdf0639aa9
+  Interface: admin
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 678be9de3cde4382a59438bf4963a612
+  Interface: internal
+  Region: RegionOne
+  Service Name: cinder
+  Service Type: volumev3
+  URL: http://172.16.2.200:8776/v3/%(project_id)s
+- Enabled: true
+  ID: 67ae333563e34bb586e3bc30afd39519
+  Interface: public
+  Region: RegionOne
+  Service Name: placement
+  Service Type: placement
+  URL: http://openstack-api.internal:8778
+- Enabled: true
+  ID: 6ad9862f356c46e99e5c1fc32b054d2e
+  Interface: admin
+  Region: RegionOne
+  Service Name: cinder
+  Service Type: volumev3
+  URL: http://172.16.2.200:8776/v3/%(project_id)s
+- Enabled: true
+  ID: 6c213e400461463f81b41f884a055795
+  Interface: public
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 71ecbb7cfe534e26b95488f0f948b74f
+  Interface: internal
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 79784d5a432944e5a55f3321de45ecaf
+  Interface: admin
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 7d2be139a6a6431193bfba880baa2deb
+  Interface: public
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 7e6db99777914bff9f5d3e24d38a3b8c
+  Interface: internal
+  Region: RegionOne
+  Service Name: glance
+  Service Type: image
+  URL: http://openstack-api.internal:9292
+- Enabled: true
+  ID: 7fd96c382a3d43b9a8c890853c08b3be
+  Interface: public
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 80a4388653f443d6b26d30fde0e83e5c
+  Interface: public
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 848bfe1f2faf4914ac3a2781f2c95f57
+  Interface: public
+  Region: RegionOne
+  Service Name: cinder
+  Service Type: volumev3
+  URL: http://172.16.2.200:8776/v3/%(project_id)s
+- Enabled: true
+  ID: 854181d9678340e2a92db54a18c34f6b
+  Interface: internal
+  Region: RegionOne
+  Service Name: placement
+  Service Type: placement
+  URL: http://openstack-api.internal:8778
+- Enabled: true
+  ID: 8cba254a221a471d9b90d442d0e3e9f8
+  Interface: admin
+  Region: RegionOne
+  Service Name: nova
+  Service Type: compute
+  URL: http://openstack-api.internal:8774/v2.1
+- Enabled: true
+  ID: 944cdd35cf374fc4a22d4b37443a0b68
+  Interface: public
+  Region: RegionOne
+  Service Name: cinder
+  Service Type: volumev3
+  URL: http://172.16.2.200:8776/v3/%(project_id)s
+- Enabled: true
+  ID: 988be52efda648328d55218f16056eb0
+  Interface: public
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: 9a5fac814a014ad3bdaeb39879efc747
+  Interface: admin
+  Region: RegionOne
+  Service Name: aodh
+  Service Type: alarming
+  URL: http://172.16.2.200:8042
+- Enabled: true
+  ID: 9ad168c0387942fe9cf018ce6f7ba760
+  Interface: public
+  Region: RegionOne
+  Service Name: aodh
+  Service Type: alarming
+  URL: http://172.16.2.200:8042
+- Enabled: true
+  ID: 9e0148bcf53c44cc8c3af31cabf9e45f
+  Interface: admin
+  Region: RegionOne
+  Service Name: aodh
+  Service Type: alarming
+  URL: http://172.16.2.200:8042
+- Enabled: true
+  ID: a1f3b880d53a49bea3a6b6848a175d26
+  Interface: internal
+  Region: RegionOne
+  Service Name: keystone
+  Service Type: identity
+  URL: http://openstack-api.internal:5000/v3
+- Enabled: true
+  ID: a62fef247e364736a57bc205e5c460ba
+  Interface: admin
+  Region: RegionOne
+  Service Name: cinder
+  Service Type: volumev3
+  URL: http://172.16.2.200:8776/v3/%(project_id)s
+- Enabled: true
+  ID: a9a64b90dc9c43f599cbbcfcac54874f
+  Interface: admin
+  Region: RegionOne
+  Service Name: keystone
+  Service Type: identity
+  URL: http://openstack-api.internal:5000/v3
+- Enabled: true
+  ID: acd60132db704957b40b49864357dc4d
+  Interface: admin
+  Region: RegionOne
+  Service Name: cinder
+  Service Type: volumev3
+  URL: http://172.16.2.200:8776/v3/%(project_id)s
+- Enabled: true
+  ID: bbbce57b63e04422a8c2929937ed3161
+  Interface: admin
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: bf77608fa53b48338c2059378c8d7f2d
+  Interface: internal
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: c48da8fb71034047a25e8068e936b941
+  Interface: public
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: c494fd544bba4083b00941b10caf4367
+  Interface: public
+  Region: RegionOne
+  Service Name: neutron
+  Service Type: network
+  URL: http://172.16.2.200:9696
+- Enabled: true
+  ID: c99202a64fda410ab262a53eb18e81a2
+  Interface: internal
+  Region: RegionOne
+  Service Name: cinder
+  Service Type: volumev3
+  URL: http://172.16.2.200:8776/v3/%(project_id)s
+- Enabled: true
+  ID: cd29806f90a14894948ddfeac590e0c3
+  Interface: public
+  Region: RegionOne
+  Service Name: glance
+  Service Type: image
+  URL: http://openstack-api.internal:9292
+- Enabled: true
+  ID: d571f0c2e72b41c2b903e4b62b802be4
+  Interface: admin
+  Region: RegionOne
+  Service Name: cinder
+  Service Type: volumev3
+  URL: http://172.16.2.200:8776/v3/%(project_id)s
+- Enabled: true
+  ID: dbde8a57093446cf9be79e43e86dee09
+  Interface: public
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: dc6cab76891649748d82e5b1f3d5d27c
+  Interface: internal
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: de7838d5f81d4223802a65227e1b3477
+  Interface: admin
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: e0e64c484c604012bb76e5c065a1d7c0
+  Interface: internal
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: e466e92be4d74744b87c273978f0d671
+  Interface: public
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: ebe74d0fd30e42c9b18907bb7c5a61d1
+  Interface: admin
+  Region: RegionOne
+  Service Name: placement
+  Service Type: placement
+  URL: http://openstack-api.internal:8778
+- Enabled: true
+  ID: ecd386d812454a35b3d60a7d58f46b66
+  Interface: internal
+  Region: RegionOne
+  Service Name: nova
+  Service Type: compute
+  URL: http://openstack-api.internal:8774/v2.1
+- Enabled: true
+  ID: f47e38259f1c40acaca608858edee461
+  Interface: public
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: f638f24211a9421e9e0e6c7e8532d817
+  Interface: admin
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: f8e3ecd6b8594f1daf580cd1cd2d7296
+  Interface: internal
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: faa0f0f6039c4a709b3ac82c654862be
+  Interface: internal
+  Region: RegionOne
+  Service Name: cinder
+  Service Type: volumev3
+  URL: http://172.16.2.200:8776/v3/%(project_id)s
+- Enabled: true
+  ID: fd9053674d334feab3edf9b6c796e4ca
+  Interface: admin
+  Region: RegionOne
+  Service Name: gnocchi
+  Service Type: metric
+  URL: http://172.16.2.200:8041
+- Enabled: true
+  ID: fee38e5bc6bd4a46b8fbf9aa42ef3f46
+  Interface: public
+  Region: RegionOne
+  Service Name: aodh
+  Service Type: alarming
+  URL: http://172.16.2.200:8042
+- Enabled: true
+  ID: ffb05e48bb504750801a0ef6bf717c47
+  Interface: admin
+  Region: RegionOne
+  Service Name: cinder
+  Service Type: volumev3
+  URL: http://172.16.2.200:8776/v3/%(project_id)s

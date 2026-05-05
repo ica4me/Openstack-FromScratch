@@ -1,0 +1,12 @@
+---
+- name: Restart Aodh services
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: restarted
+  loop: "{{ aodh_services | default([]) }}"
+  when: (aodh_services | default([])) | length > 0
+
+- name: Restart Aodh API
+  ansible.builtin.service:
+    name: "{{ aodh_api_service | default('apache2') }}"
+    state: restarted

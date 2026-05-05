@@ -35,6 +35,8 @@
     name: "{{ nova_compute_packages }}"
     state: present
     update_cache: true
+    cache_valid_time: 3600
+    lock_timeout: 300
 
 - name: Ensure libvirt service is enabled and started
   ansible.builtin.service:

@@ -1,0 +1,12 @@
+---
+- name: Restart Gnocchi services
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: restarted
+  loop: "{{ gnocchi_services | default([]) }}"
+  when: (gnocchi_services | default([])) | length > 0
+
+- name: Restart Apache for Gnocchi API
+  ansible.builtin.service:
+    name: "{{ gnocchi_api_service | default('apache2') }}"
+    state: restarted

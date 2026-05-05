@@ -1,0 +1,34 @@
+# Managed by Ansible - Ceilometer Telemetry Collector
+
+[DEFAULT]
+debug = false
+transport_url = {{ ceilometer_transport_url }}
+
+[service_credentials]
+auth_url = {{ service_endpoints.keystone }}
+auth_type = password
+project_domain_name = {{ openstack_domain }}
+user_domain_name = {{ openstack_domain }}
+project_name = service
+username = {{ ceilometer_service_user }}
+password = {{ ceilometer_service_password }}
+interface = internalURL
+region_name = {{ openstack_region }}
+
+[keystone_authtoken]
+www_authenticate_uri = {{ service_endpoints.keystone | regex_replace('/v3$', '') }}
+auth_url = {{ service_endpoints.keystone }}
+memcached_servers = {{ ceilometer_memcached_servers }}
+auth_type = password
+project_domain_name = {{ openstack_domain }}
+user_domain_name = {{ openstack_domain }}
+project_name = service
+username = {{ ceilometer_service_user }}
+password = {{ ceilometer_service_password }}
+service_token_roles_required = true
+
+[publisher]
+telemetry_secret = {{ vault_metadata_secret }}
+
+[oslo_messaging_notifications]
+driver = messagingv2

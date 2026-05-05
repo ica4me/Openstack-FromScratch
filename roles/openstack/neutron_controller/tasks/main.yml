@@ -18,6 +18,8 @@
     name: "{{ neutron_packages_controller }}"
     state: present
     update_cache: true
+    cache_valid_time: 3600
+    lock_timeout: 300
 
 - name: Ensure Neutron database exists on bootstrap controller
   community.mysql.mysql_db:

@@ -1,0 +1,29 @@
+# Managed by Ansible - Aodh API WSGI backend
+# HAProxy listen di VIP:8042.
+# Apache backend hanya listen di management IP masing-masing controller.
+
+Listen {{ aodh_api_bind_host }}:{{ aodh_api_bind_port }}
+
+<VirtualHost {{ aodh_api_bind_host }}:{{ aodh_api_bind_port }}>
+    ServerName {{ internal_fqdn | default('openstack-api.internal') }}
+
+    WSGIDaemonProcess aodh-api \
+        processes={{ aodh_api_processes | default(2) }} \
+        threads={{ aodh_api_threads | default(10) }} \
+        user=aodh \
+        group=aodh \
+        display-name=%{GROUP}
+
+    WSGIProcessGroup aodh-api
+    WSGIApplicationGroup %{GLOBAL}
+    WSGIPassAuthorization On
+
+    WSGIScriptAlias / /usr/share/aodh/app.wsgi
+
+    ErrorLog /var/log/apache2/aodh_error.log
+    CustomLog /var/log/apache2/aodh_access.log combined
+
+    <Directory /usr/share/aodh>
+        Require all granted
+    </Directory>
+</VirtualHost>

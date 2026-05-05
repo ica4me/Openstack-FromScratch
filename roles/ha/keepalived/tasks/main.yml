@@ -19,7 +19,7 @@
   ansible.builtin.apt:
     name: "{{ keepalived_package }}"
     state: present
-    update_cache: true
+    lock_timeout: 300
 
 - name: Ensure keepalived config directory exists
   ansible.builtin.file:

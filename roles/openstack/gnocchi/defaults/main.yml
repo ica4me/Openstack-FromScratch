@@ -1,0 +1,65 @@
+---
+gnocchi_packages:
+  - gnocchi-api
+  - gnocchi-common
+  - gnocchi-metricd
+  - python3-gnocchiclient
+  - python3-rados
+  - python3-rbd
+  - python3-tooz
+  - python3-memcache
+  - python3-pymysql
+  - ceph-common
+
+gnocchi_conf_path: /etc/gnocchi/gnocchi.conf
+gnocchi_state_path: /var/lib/gnocchi
+gnocchi_incoming_path: /var/lib/gnocchi/tmp
+gnocchi_log_path: /var/log/gnocchi
+
+gnocchi_db_sync_marker: /var/lib/gnocchi/.upgraded
+gnocchi_upgrade_timeout: 900
+
+gnocchi_database_name: gnocchi
+gnocchi_database_user: gnocchi
+gnocchi_db_password: "{{ vault_gnocchi_db_password }}"
+
+gnocchi_service_name: gnocchi
+gnocchi_service_type: metric
+gnocchi_service_description: "OpenStack Metric Service"
+gnocchi_service_user: gnocchi
+gnocchi_service_password: "{{ vault_gnocchi_service_password }}"
+
+gnocchi_api_port: 8041
+gnocchi_api_bind_host: "{{ management_ip }}"
+gnocchi_api_bind_port: "{{ gnocchi_api_port }}"
+gnocchi_api_apache_site: gnocchi-api.conf
+gnocchi_api_service: apache2
+gnocchi_endpoint: "http://{{ internal_vip | default(vip_internal) }}:8041"
+gnocchi_coordination_url: "memcached://{{ internal_vip | default(vip_internal) }}:11211"
+
+gnocchi_metricd_workers: 4
+
+gnocchi_rbd_pool: metrics
+gnocchi_rbd_user: gnocchi
+gnocchi_rbd_keyring: /etc/ceph/ceph.client.gnocchi.keyring
+gnocchi_rbd_ceph_conf: /etc/ceph/ceph.conf
+
+# API jalan via Apache, jadi service systemd yang dikelola hanya metricd.
+gnocchi_services:
+  - gnocchi-metricd
+
+admin_openrc_path: /root/admin-openrc
+bootstrap_controller: "{{ groups['controllers'][0] }}"
+openstack_domain: Default
+openstack_region: RegionOne
+db_host: "{{ vip_internal }}"
+
+rabbitmq_openstack_user: openstack
+rabbitmq_openstack_password: "{{ vault_rabbitmq_openstack_password }}"
+gnocchi_transport_url: "rabbit://{% for host in groups['controllers'] %}{{ rabbitmq_openstack_user }}:{{ rabbitmq_openstack_password }}@{{ hostvars[host].management_ip }}:5672{% if not loop.last %},{% endif %}{% endfor %}/"
+
+gnocchi_memcached_servers: >-
+  {{ groups['controllers']
+     | map('extract', hostvars, 'management_ip')
+     | map('regex_replace', '$', ':11211')
+     | join(',') }}

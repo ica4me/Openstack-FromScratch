@@ -1,0 +1,133 @@
+---
+- name: Assert Ceilometer variables exist
+  ansible.builtin.assert:
+    that:
+      - ceilometer_service_password is defined
+      - service_endpoints.keystone is defined
+      - ceilometer_transport_url is defined
+    fail_msg: "Variabel Ceilometer belum lengkap."
+
+- name: Install Ceilometer packages on controllers
+  ansible.builtin.apt:
+    name: "{{ ceilometer_packages_controller }}"
+    state: present
+    update_cache: false
+  retries: 3
+  delay: 10
+  register: ceilometer_controller_pkg_result
+  until: ceilometer_controller_pkg_result is succeeded
+  when: inventory_hostname in groups['controllers']
+
+- name: Install Ceilometer packages on computes
+  ansible.builtin.apt:
+    name: "{{ ceilometer_packages_compute }}"
+    state: present
+    update_cache: false
+  retries: 3
+  delay: 10
+  register: ceilometer_compute_pkg_result
+  until: ceilometer_compute_pkg_result is succeeded
+  when: inventory_hostname in groups['computes']
+
+- name: Ensure Ceilometer directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: ceilometer
+    group: ceilometer
+    mode: "0755"
+  loop:
+    - /var/lib/ceilometer
+    - /var/log/ceilometer
+
+- name: Check Ceilometer service user
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack user show {{ ceilometer_service_user }} --domain {{ openstack_domain }} -f value -c id
+  register: ceilometer_user_check
+  changed_when: false
+  failed_when: false
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Create Ceilometer service user
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack user create {{ ceilometer_service_user }} \
+      --domain {{ openstack_domain }} \
+      --password '{{ ceilometer_service_password }}'
+  when: ceilometer_user_check.rc != 0
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Assign admin role to Ceilometer service user
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack role add --project service --user {{ ceilometer_service_user }} admin
+  register: ceilometer_role_add
+  changed_when: ceilometer_role_add.rc == 0
+  failed_when: ceilometer_role_add.rc != 0 and 'Conflict occurred' not in ceilometer_role_add.stderr
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Deploy ceilometer.conf
+  ansible.builtin.template:
+    src: ceilometer.conf.j2
+    dest: "{{ ceilometer_conf_path }}"
+    owner: root
+    group: ceilometer
+    mode: "0640"
+    backup: true
+  notify:
+    - Restart Ceilometer controller services
+    - Restart Ceilometer compute services
+
+- name: Deploy Ceilometer pipeline.yaml
+  ansible.builtin.template:
+    src: pipeline.yaml.j2
+    dest: "{{ ceilometer_pipeline_path }}"
+    owner: root
+    group: ceilometer
+    mode: "0640"
+    backup: true
+  notify:
+    - Restart Ceilometer controller services
+    - Restart Ceilometer compute services
+
+- name: Deploy Ceilometer polling.yaml
+  ansible.builtin.template:
+    src: polling.yaml.j2
+    dest: "{{ ceilometer_polling_path }}"
+    owner: root
+    group: ceilometer
+    mode: "0640"
+    backup: true
+  notify:
+    - Restart Ceilometer controller services
+    - Restart Ceilometer compute services
+
+- name: Flush handlers before Ceilometer validation
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure Ceilometer controller services are enabled and started
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop: "{{ ceilometer_services_controller }}"
+  when: inventory_hostname in groups['controllers']
+
+- name: Ensure Ceilometer compute services are enabled and started
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop: "{{ ceilometer_services_compute }}"
+  when: inventory_hostname in groups['computes']
+
+- name: Print Ceilometer services
+  ansible.builtin.shell: |
+    systemctl --no-pager --full status {{ item }} | sed -n '1,12p'
+  loop: "{{ ceilometer_services_controller if inventory_hostname in groups['controllers'] else ceilometer_services_compute }}"
+  changed_when: false
+  failed_when: false

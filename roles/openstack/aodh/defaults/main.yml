@@ -1,0 +1,53 @@
+---
+aodh_packages:
+  - aodh-api
+  - aodh-evaluator
+  - aodh-notifier
+  - aodh-listener
+  - aodh-expirer
+  - python3-aodhclient
+  - python3-pymysql
+
+aodh_conf_path: /etc/aodh/aodh.conf
+aodh_db_sync_marker: /var/lib/aodh/.db_synced
+
+aodh_database_name: aodh
+aodh_database_user: aodh
+aodh_db_password: "{{ vault_aodh_db_password }}"
+
+aodh_service_name: aodh
+aodh_service_type: alarming
+aodh_service_description: "OpenStack Alarming Service"
+aodh_service_user: aodh
+aodh_service_password: "{{ vault_aodh_service_password }}"
+
+aodh_api_port: 8042
+aodh_api_bind_host: "{{ management_ip }}"
+aodh_api_bind_port: "{{ aodh_api_port }}"
+aodh_api_service: apache2
+aodh_endpoint: "http://{{ internal_vip | default(vip_internal) }}:8042"
+
+aodh_api_processes: 2
+aodh_api_threads: 10
+
+# API dijalankan oleh Apache WSGI, jadi jangan masukkan aodh-api di sini.
+aodh_services:
+  - aodh-evaluator
+  - aodh-notifier
+  - aodh-listener
+
+admin_openrc_path: /root/admin-openrc
+bootstrap_controller: "{{ groups['controllers'][0] }}"
+openstack_domain: Default
+openstack_region: RegionOne
+db_host: "{{ vip_internal }}"
+
+rabbitmq_openstack_user: openstack
+rabbitmq_openstack_password: "{{ vault_rabbitmq_openstack_password }}"
+aodh_transport_url: "rabbit://{% for host in groups['controllers'] %}{{ rabbitmq_openstack_user }}:{{ rabbitmq_openstack_password }}@{{ hostvars[host].management_ip }}:5672{% if not loop.last %},{% endif %}{% endfor %}/"
+
+aodh_memcached_servers: >-
+  {{ groups['controllers']
+     | map('extract', hostvars, 'management_ip')
+     | map('regex_replace', '$', ':11211')
+     | join(',') }}
