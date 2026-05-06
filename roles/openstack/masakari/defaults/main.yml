@@ -34,9 +34,13 @@ masakari_controller_services:
   - masakari-api
   - masakari-engine
 
+#masakari_compute_services:
+#  - masakari-host-monitor
+#  - masakari-instance-monitor
+
 masakari_compute_services:
-  - masakari-host-monitor
-  - masakari-instance-monitor
+  - masakari-hostmonitor
+  - masakari-instancemonitor
 
 masakari_api_service: masakari-api
 

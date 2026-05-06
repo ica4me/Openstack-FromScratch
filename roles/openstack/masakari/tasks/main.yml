@@ -274,6 +274,21 @@
   notify: Restart Masakari compute services
   when: inventory_hostname in groups['computes']
 
+- name: Deploy Masakari Monitor systemd units on computes
+  ansible.builtin.template:
+    src: "{{ item }}.service.j2"
+    dest: "/etc/systemd/system/{{ item }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - masakari-hostmonitor
+    - masakari-instancemonitor
+  when: inventory_hostname in groups['computes']
+  notify:
+    - Reload systemd
+    - Restart Masakari compute services
+
 - name: Deploy corosync.conf on computes
   ansible.builtin.template:
     src: corosync.conf.j2

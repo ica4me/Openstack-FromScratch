@@ -4,6 +4,11 @@ Project ini bertujuan membangun automation Ansible from scratch untuk OpenStack 
 
 Deployment ini package-based, bukan Kolla Ansible.
 
+FullConf
+```
+git clone https://github.com/ica4me/Openstack-FromScratch.git openstack-caracal-ansible
+```
+
 ## Topologi Lab
 
 - 3 Controller
@@ -30,26 +35,47 @@ Deployment ini package-based, bukan Kolla Ansible.
 | compute-01    |  172.16.2.221 | 172.16.1.221 |
 | compute-02    |  172.16.2.222 | 172.16.1.222 |
 
-## Tahap 1
-
-```bash
-make graph
-make ping
-make vars
-make preflight
-```
-
-Target:
-
-```text
-failed=0
-unreachable=0
-```
-
-## Tahap Berikutnya
-
-Setelah Tahap 1 sukses, lanjut ke:
-
-```bash
-make base
-```
+## Daftar Service Systemd
+keepalived
+haproxy
+mariadb
+rabbitmq-server
+memcached
+apache2
+keystone via apache/wsgi
+glance-api
+placement-api via apache/wsgi
+nova-api
+nova-scheduler
+nova-conductor
+nova-novncproxy
+neutron-server
+neutron-openvswitch-agent
+neutron-l3-agent
+neutron-dhcp-agent
+neutron-metadata-agent
+cinder-api
+cinder-scheduler
+cinder-volume
+gnocchi-metricd
+gnocchi-api via apache/wsgi
+ceilometer-agent-central
+ceilometer-agent-notification
+aodh-api via apache/wsgi
+aodh-evaluator
+aodh-notifier
+aodh-listener
+masakari-api
+masakari-engine
+pacemaker
+corosync
+openvswitch-switch
+libvirtd / virtqemud
+nova-compute
+neutron-openvswitch-agent
+ceilometer-agent-compute
+masakari-hostmonitor
+masakari-instancemonitor
+masakari-processmonitor
+pacemaker
+corosync

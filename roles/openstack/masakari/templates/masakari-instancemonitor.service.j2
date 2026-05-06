@@ -1,0 +1,16 @@
+[Unit]
+Description=OpenStack Masakari Instance Monitor
+After=network-online.target libvirtd.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/bin/masakari-instancemonitor --config-file {{ masakari_monitors_conf_path }}
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

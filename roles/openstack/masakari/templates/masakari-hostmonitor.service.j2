@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenStack Masakari Host Monitor
+After=network-online.target corosync.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+# Memaksa binary membaca config yang didefinisikan oleh Ansible
+ExecStart=/usr/bin/masakari-hostmonitor --config-file {{ masakari_monitors_conf_path }}
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

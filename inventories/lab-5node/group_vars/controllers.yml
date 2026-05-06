@@ -129,6 +129,16 @@ haproxy_openstack_services:
       uri: /
       expect_rstatus: "^(2|3|4)[0-9][0-9]$"
 
+  - name: nova_metadata_api
+    bind_ip: "{{ vip_internal }}"
+    bind_port: 8775
+    backend_port: 8775
+    mode: http
+    httpchk:
+      method: GET
+      uri: /
+      expect_rstatus: "^(2|3)[0-9][0-9]$"
+
 # MariaDB Galera
 mariadb_bind_address: "0.0.0.0"
 mariadb_port: 3306
