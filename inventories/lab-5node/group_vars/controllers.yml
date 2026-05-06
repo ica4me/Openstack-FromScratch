@@ -92,16 +92,6 @@ haproxy_openstack_services:
       uri: /
       expect_rstatus: "^(2|3)[0-9][0-9]$"
 
-#  - name: gnocchi_api
-#    bind_ip: "{{ internal_vip }}"
-#    bind_port: 8041
-#    backend_port: 8041
-#    mode: http
-#    httpchk:
-#      method: GET
-#      uri: /
-#      expect_rstatus: "^(2|3|4)[0-9][0-9]$"
-
   - name: gnocchi_api
     bind_ip: "{{ vip_internal }}"
     bind_port: 8041
@@ -128,6 +118,16 @@ haproxy_openstack_services:
     backend_port: 11211
     mode: tcp
     check_type: tcp
+
+  - name: masakari_api
+    bind_ip: "{{ internal_vip | default(vip_internal) }}"
+    bind_port: 15868
+    backend_port: 15868
+    mode: http
+    httpchk:
+      method: GET
+      uri: /
+      expect_rstatus: "^(2|3|4)[0-9][0-9]$"
 
 # MariaDB Galera
 mariadb_bind_address: "0.0.0.0"

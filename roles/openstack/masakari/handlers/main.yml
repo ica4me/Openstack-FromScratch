@@ -1,0 +1,47 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart Masakari controller services
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: restarted
+  loop: "{{ masakari_controller_services | default([]) }}"
+  when:
+    - inventory_hostname in groups['controllers']
+    - (masakari_controller_services | default([])) | length > 0
+
+- name: Restart Masakari compute services
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: restarted
+  loop: "{{ masakari_compute_services | default([]) }}"
+  when:
+    - inventory_hostname in groups['computes']
+    - (masakari_compute_services | default([])) | length > 0
+
+- name: Restart Corosync Pacemaker
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: restarted
+  loop:
+    - corosync
+    - pacemaker
+  when:
+    - inventory_hostname in groups['computes']
+    - masakari_enable_compute_pacemaker | bool
+
+- name: Restart Horizon Apache
+  ansible.builtin.service:
+    name: apache2
+    state: restarted
+  when:
+    - inventory_hostname in groups['controllers']
+    - masakari_dashboard_enabled | bool
+
+- name: Restart Apache
+  ansible.builtin.service:
+    name: apache2
+    state: restarted
+  when: inventory_hostname in groups['controllers']

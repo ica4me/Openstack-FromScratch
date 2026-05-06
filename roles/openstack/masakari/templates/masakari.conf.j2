@@ -1,0 +1,64 @@
+# Managed by Ansible - Masakari Instance HA Service
+
+[DEFAULT]
+debug = false
+auth_strategy = keystone
+transport_url = {{ masakari_transport_url }}
+state_path = /var/lib/masakari
+
+# Penting: opsi yang benar adalah masakari_api_listen, bukan osapi_masakari_listen.
+masakari_api_listen = {{ masakari_api_bind_host }}
+masakari_api_listen_port = {{ masakari_api_bind_port }}
+
+# Privileged OpenStack account used by Masakari to call Nova.
+os_privileged_user_name = nova
+os_privileged_user_password = {{ nova_service_password }}
+os_privileged_user_tenant = service
+os_privileged_user_auth_url = {{ service_endpoints.keystone }}
+os_user_domain_name = {{ openstack_domain }}
+os_project_domain_name = {{ openstack_domain }}
+os_region_name = {{ openstack_region }}
+nova_catalog_admin_info = compute:nova:internalURL
+
+[database]
+connection = mysql+pymysql://{{ masakari_database_user }}:{{ masakari_db_password }}@{{ db_host }}/{{ masakari_database_name }}
+
+[taskflow]
+connection = mysql+pymysql://{{ masakari_database_user }}:{{ masakari_db_password }}@{{ db_host }}/{{ masakari_database_name }}
+
+[keystone_authtoken]
+www_authenticate_uri = {{ service_endpoints.keystone | regex_replace('/v3$', '') }}
+auth_url = {{ service_endpoints.keystone }}
+memcached_servers = {{ masakari_memcached_servers }}
+auth_type = password
+project_domain_name = {{ openstack_domain }}
+user_domain_name = {{ openstack_domain }}
+project_name = service
+username = {{ masakari_service_user }}
+password = {{ masakari_service_password }}
+service_token_roles_required = true
+
+[oslo_messaging_notifications]
+driver = messagingv2
+
+[oslo_concurrency]
+lock_path = /var/lib/masakari/tmp
+
+[nova]
+auth_url = {{ service_endpoints.keystone }}
+auth_type = password
+project_domain_name = {{ openstack_domain }}
+user_domain_name = {{ openstack_domain }}
+project_name = service
+username = nova
+password = {{ nova_service_password }}
+region_name = {{ openstack_region }}
+
+[host_failure]
+evacuate_all_instances = {{ masakari_evacuate_all_instances | bool | lower }}
+ha_enabled_instance_metadata_key = {{ masakari_ha_metadata_key }}
+ignore_instances_in_error_state = {{ masakari_ignore_error_instances | bool | lower }}
+
+[instance_failure]
+process_all_instances = {{ masakari_process_all_instances | bool | lower }}
+ha_enabled_instance_metadata_key = {{ masakari_ha_metadata_key }}

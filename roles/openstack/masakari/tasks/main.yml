@@ -1,0 +1,446 @@
+---
+- name: Assert Masakari variables exist
+  ansible.builtin.assert:
+    that:
+      - masakari_db_password is defined
+      - masakari_service_password is defined
+      - masakari_endpoint is defined
+      - service_endpoints.keystone is defined
+      - nova_service_password is defined
+      - groups['computes'] | length > 0
+    fail_msg: "Variabel Masakari belum lengkap."
+
+- name: Install Masakari packages on controllers
+  ansible.builtin.apt:
+    name: "{{ masakari_controller_packages }}"
+    state: present
+    update_cache: false
+  retries: 3
+  delay: 10
+  register: masakari_controller_pkg_result
+  until: masakari_controller_pkg_result is succeeded
+  when: inventory_hostname in groups['controllers']
+
+- name: Install Masakari monitor and Pacemaker packages on computes
+  ansible.builtin.apt:
+    name: "{{ masakari_compute_packages }}"
+    state: present
+    update_cache: false
+  retries: 3
+  delay: 10
+  register: masakari_compute_pkg_result
+  until: masakari_compute_pkg_result is succeeded
+  when: inventory_hostname in groups['computes']
+
+- name: Install Masakari dashboard dependencies on controllers
+  ansible.builtin.apt:
+    name: "{{ masakari_dashboard_packages }}"
+    state: present
+    update_cache: false
+  retries: 3
+  delay: 10
+  register: masakari_dashboard_pkg_result
+  until: masakari_dashboard_pkg_result is succeeded
+  when:
+    - inventory_hostname in groups['controllers']
+    - masakari_dashboard_enabled | bool
+
+- name: Disable packaged Masakari Apache site/conf if present
+  ansible.builtin.shell: |
+    a2dissite masakari-api.conf 2>/dev/null || true
+    a2disconf masakari-api 2>/dev/null || true
+    rm -f /etc/apache2/sites-enabled/masakari-api.conf
+    rm -f /etc/apache2/conf-enabled/masakari-api.conf
+    apache2ctl configtest
+  args:
+    executable: /bin/bash
+  changed_when: false
+  when: inventory_hostname in groups['controllers']
+  notify: Restart Horizon Apache
+
+
+- name: Ensure masakari group exists
+  ansible.builtin.group:
+    name: masakari
+    system: true
+
+- name: Ensure masakari user exists
+  ansible.builtin.user:
+    name: masakari
+    group: masakari
+    system: true
+    shell: /usr/sbin/nologin
+    home: /var/lib/masakari
+    create_home: false
+
+- name: Ensure Masakari directories exist on controllers
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: masakari
+    group: masakari
+    mode: "0755"
+  loop:
+    - /etc/masakari
+    - /var/lib/masakari
+    - /var/lib/masakari/tmp
+    - /var/log/masakari
+  when: inventory_hostname in groups['controllers']
+
+- name: Ensure Masakari monitor directories exist on computes
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: masakari
+    group: masakari
+    mode: "0755"
+  loop:
+    - /etc/masakari
+    - /var/lib/masakari
+    - /var/log/masakari
+  when: inventory_hostname in groups['computes']
+
+- name: Ensure Masakari database exists
+  community.mysql.mysql_db:
+    name: "{{ masakari_database_name }}"
+    state: present
+    login_user: root
+    login_password: "{{ vault_mysql_root_password }}"
+    login_unix_socket: /run/mysqld/mysqld.sock
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Ensure Masakari database user exists
+  community.mysql.mysql_user:
+    name: "{{ masakari_database_user }}"
+    password: "{{ masakari_db_password }}"
+    host: "{{ item }}"
+    priv: "{{ masakari_database_name }}.*:ALL"
+    state: present
+    login_user: root
+    login_password: "{{ vault_mysql_root_password }}"
+    login_unix_socket: /run/mysqld/mysqld.sock
+  loop:
+    - "%"
+    - localhost
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Check Masakari service user
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack user show {{ masakari_service_user }} --domain {{ openstack_domain }} -f value -c id
+  register: masakari_user_check
+  changed_when: false
+  failed_when: false
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Create Masakari service user
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack user create {{ masakari_service_user }} \
+      --domain {{ openstack_domain }} \
+      --password '{{ masakari_service_password }}'
+  register: masakari_user_create
+  changed_when: masakari_user_create.rc == 0
+  failed_when: >
+    masakari_user_create.rc != 0 and
+    'Duplicate entry' not in masakari_user_create.stderr and
+    'Conflict occurred' not in masakari_user_create.stderr
+  when: masakari_user_check.rc != 0
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Assign admin role to Masakari service user
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack role add --project service --user {{ masakari_service_user }} admin
+  register: masakari_role_add
+  changed_when: masakari_role_add.rc == 0
+  failed_when: >
+    masakari_role_add.rc != 0 and
+    'Conflict occurred' not in masakari_role_add.stderr
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Check Masakari service catalog
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack service show {{ masakari_service_name }} -f value -c id
+  register: masakari_service_check
+  changed_when: false
+  failed_when: false
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Create Masakari instance-ha service
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack service create \
+      --name {{ masakari_service_name }} \
+      --description "{{ masakari_service_description }}" \
+      {{ masakari_service_type }}
+  when: masakari_service_check.rc != 0
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+#- name: Ensure Masakari endpoints exist
+#  ansible.builtin.shell: |
+#    . {{ admin_openrc_path }}
+#    openstack endpoint create --region {{ openstack_region }} \
+#      {{ masakari_service_type }} {{ item }} "{{ masakari_endpoint }}"
+#  register: masakari_endpoint_create
+#  changed_when: masakari_endpoint_create.rc == 0
+#  failed_when: >
+#    masakari_endpoint_create.rc != 0 and
+#    'Conflict occurred' not in masakari_endpoint_create.stderr and
+#    'Duplicate entry' not in masakari_endpoint_create.stderr
+#  loop:
+#    - public
+#    - internal
+#    - admin
+#  run_once: true
+#  delegate_to: "{{ bootstrap_controller }}"
+- name: Check Masakari endpoints
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack endpoint list \
+      --service {{ masakari_service_name }} \
+      --interface {{ item }} \
+      --region {{ openstack_region }} \
+      -f value -c ID | head -n 1
+  register: masakari_endpoint_check
+  changed_when: false
+  failed_when: false
+  loop:
+    - public
+    - internal
+    - admin
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Create missing Masakari endpoints
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    openstack endpoint create --region {{ openstack_region }} \
+      {{ masakari_service_type }} {{ item.item }} "{{ masakari_endpoint }}"
+  when: item.stdout | trim == ""
+  loop: "{{ masakari_endpoint_check.results }}"
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+
+- name: Deploy masakari.conf on controllers
+  ansible.builtin.template:
+    src: masakari.conf.j2
+    dest: "{{ masakari_conf_path }}"
+    owner: root
+    group: masakari
+    mode: "0640"
+    backup: true
+  notify: Restart Masakari controller services
+  when: inventory_hostname in groups['controllers']
+
+- name: Check masakari-api executable
+  ansible.builtin.shell: command -v masakari-api
+  register: masakari_api_executable
+  changed_when: false
+  failed_when: false
+  when: inventory_hostname in groups['controllers']
+
+- name: Deploy Masakari API systemd unit
+  ansible.builtin.template:
+    src: masakari-api.service.j2
+    dest: /etc/systemd/system/masakari-api.service
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - inventory_hostname in groups['controllers']
+    - masakari_api_executable.rc == 0
+  notify:
+    - Reload systemd
+    - Restart Masakari controller services
+
+- name: Deploy masakarimonitors.conf on computes
+  ansible.builtin.template:
+    src: masakarimonitors.conf.j2
+    dest: "{{ masakari_monitors_conf_path }}"
+    owner: root
+    group: masakari
+    mode: "0640"
+    backup: true
+  notify: Restart Masakari compute services
+  when: inventory_hostname in groups['computes']
+
+- name: Deploy corosync.conf on computes
+  ansible.builtin.template:
+    src: corosync.conf.j2
+    dest: /etc/corosync/corosync.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  notify: Restart Corosync Pacemaker
+  when:
+    - inventory_hostname in groups['computes']
+    - masakari_enable_compute_pacemaker | bool
+
+- name: Enable and start Corosync/Pacemaker on computes
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - corosync
+    - pacemaker
+  when:
+    - inventory_hostname in groups['computes']
+    - masakari_enable_compute_pacemaker | bool
+
+- name: Set Pacemaker no-quorum-policy for two-node lab
+  ansible.builtin.command: crm configure property no-quorum-policy=ignore
+  changed_when: false
+  failed_when: false
+  when:
+    - inventory_hostname == groups['computes'][0]
+    - masakari_enable_compute_pacemaker | bool
+
+- name: Disable Pacemaker STONITH for lab baseline
+  ansible.builtin.command: crm configure property stonith-enabled=false
+  changed_when: false
+  failed_when: false
+  when:
+    - inventory_hostname == groups['computes'][0]
+    - masakari_enable_compute_pacemaker | bool
+
+- name: Check Masakari DB sync marker
+  ansible.builtin.stat:
+    path: "{{ masakari_db_sync_marker }}"
+  register: masakari_db_sync_marker_stat
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Sync Masakari database
+  ansible.builtin.command: masakari-manage db sync
+  become: true
+  become_user: masakari
+  when: not masakari_db_sync_marker_stat.stat.exists
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Create Masakari DB sync marker
+  ansible.builtin.file:
+    path: "{{ masakari_db_sync_marker }}"
+    state: touch
+    owner: masakari
+    group: masakari
+    mode: "0600"
+  when: not masakari_db_sync_marker_stat.stat.exists
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Flush handlers before Masakari API validation
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure Masakari controller services are enabled and started
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop: "{{ masakari_controller_services }}"
+  when: inventory_hostname in groups['controllers']
+
+- name: Ensure Masakari compute monitor services are enabled and started
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop: "{{ masakari_compute_services }}"
+  when: inventory_hostname in groups['computes']
+
+- name: Wait for Masakari API port
+  ansible.builtin.wait_for:
+    host: "{{ masakari_api_bind_host }}"
+    port: "{{ masakari_api_bind_port }}"
+    timeout: 90
+  when: inventory_hostname in groups['controllers']
+
+- name: Validate Masakari API through VIP
+  ansible.builtin.uri:
+    url: "http://{{ internal_vip | default(vip_internal) }}:{{ masakari_api_port | default(15868) }}/"
+    status_code: [200, 300, 401, 403]
+    timeout: 30
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Ensure Masakari failover segment exists
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    SEG_ID=$(openstack segment show {{ masakari_segment_name }} -f value -c uuid 2>/dev/null || true)
+    if [ -z "$SEG_ID" ]; then
+      openstack segment create \
+        --description "Compute HA segment managed by Ansible" \
+        {{ masakari_segment_name }} \
+        {{ masakari_segment_recovery_method }} \
+        {{ masakari_segment_service_type }} \
+        -f value -c uuid
+    else
+      echo "$SEG_ID"
+    fi
+  register: masakari_segment_id
+  changed_when: "'Created' in masakari_segment_id.stdout"
+  failed_when: masakari_segment_id.rc != 0
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Register compute hosts in Masakari segment
+  ansible.builtin.shell: |
+    . {{ admin_openrc_path }}
+    SEG_ID=$(openstack segment show {{ masakari_segment_name }} -f value -c uuid)
+    HOST="{{ hostvars[item].ansible_hostname | default(item) }}"
+    if openstack segment host show "$SEG_ID" "$HOST" >/dev/null 2>&1; then
+      openstack segment host update "$SEG_ID" "$HOST" \
+        --type COMPUTE \
+        --control_attributes SSH \
+        --reserved False \
+        --on_maintenance False >/dev/null
+    else
+      openstack segment host create \
+        "$HOST" COMPUTE SSH "$SEG_ID" \
+        --reserved False \
+        --on_maintenance False >/dev/null
+    fi
+  loop: "{{ groups['computes'] }}"
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ bootstrap_controller }}"
+
+- name: Install Masakari dashboard plugin from stable 2024.1 tarball
+  ansible.builtin.shell: |
+    set -e
+    apt purge -y python3-masakari-dashboard >/dev/null 2>&1 || true
+    pip3 uninstall -y masakari-dashboard >/dev/null 2>&1 || true
+
+    find /usr/share/openstack-dashboard/openstack_dashboard/local/enabled \
+      -type f | grep -i masakari | xargs -r rm -f
+
+    pip3 install {{ masakari_dashboard_tarball }} || \
+      pip3 install --break-system-packages {{ masakari_dashboard_tarball }}
+
+    find /usr/local /usr/lib/python3/dist-packages /usr/local/lib/python3.10/dist-packages \
+      -type f 2>/dev/null | grep -Ei '/masakaridashboard/.*/_[0-9]+_.*\.py$' | \
+      while read f; do cp "$f" /usr/share/openstack-dashboard/openstack_dashboard/local/enabled/; done
+
+    python3 /usr/share/openstack-dashboard/manage.py collectstatic --noinput >/dev/null 2>&1 || true
+    python3 /usr/share/openstack-dashboard/manage.py compress --force >/dev/null 2>&1 || true
+  args:
+    executable: /bin/bash
+  notify: Restart Horizon Apache
+  when:
+    - inventory_hostname in groups['controllers']
+    - masakari_dashboard_enabled | bool
+
+- name: Flush dashboard handler
+  ansible.builtin.meta: flush_handlers

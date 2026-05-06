@@ -75,3 +75,9 @@ horizon:
 	ansible-playbook -i $(INV) playbooks/12-horizon.yml
 telemetry:
 	ansible-playbook -i $(INV) playbooks/13-telemetry.yml
+
+instance-ha:
+	ansible-playbook -i $(INV) playbooks/14-instance-ha.yml
+
+masakari:
+	ansible-playbook -i $(INV) playbooks/14-instance-ha.yml

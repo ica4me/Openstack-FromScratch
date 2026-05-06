@@ -1,0 +1,45 @@
+# Managed by Ansible - Masakari Monitors
+
+[DEFAULT]
+debug = false
+transport_url = {{ masakari_transport_url }}
+hostname = {{ ansible_hostname }}
+
+[api]
+auth_url = {{ service_endpoints.keystone }}
+auth_type = password
+project_domain_name = {{ openstack_domain }}
+user_domain_name = {{ openstack_domain }}
+project_name = service
+username = {{ masakari_service_user }}
+password = {{ masakari_service_password }}
+region_name = {{ openstack_region }}
+endpoint_type = internalURL
+cafile =
+
+[callback]
+retry_max = 12
+retry_interval = 10
+
+[libvirt]
+connection_uri = qemu:///system
+
+[host]
+monitoring_driver = default
+monitoring_interval = 30
+
+# Lab mode: karena belum pakai IPMI/STONITH resource agent.
+# Production sebaiknya False + fencing/STONITH valid.
+disable_ipmi_check = True
+
+# Untuk cluster langsung di compute nodes, bukan pacemaker-remote.
+pacemaker_node_type = cluster
+restrict_to_remotes = False
+
+# Sesuaikan dengan network management compute.
+corosync_multicast_interfaces = {{ vip_interface | default('ens19') }}
+corosync_multicast_ports = 5405
+stonith_wait = 30
+
+[process]
+process_list_path = /etc/masakari/process_list.yaml

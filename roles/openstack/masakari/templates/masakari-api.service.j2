@@ -1,0 +1,16 @@
+[Unit]
+Description=OpenStack Masakari API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=masakari
+Group=masakari
+ExecStart=/usr/bin/masakari-api --config-file {{ masakari_conf_path }}
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

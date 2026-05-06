@@ -1,0 +1,35 @@
+# Managed by Ansible - Corosync for Masakari compute HA
+
+totem {
+    version: 2
+    cluster_name: {{ masakari_corosync_cluster_name }}
+    transport: udpu
+    token: {{ masakari_corosync_token }}
+    consensus: {{ masakari_corosync_consensus }}
+    secauth: off
+    crypto_cipher: none
+    crypto_hash: none
+}
+
+nodelist {
+{% for host in groups['computes'] %}
+    node {
+        ring0_addr: {{ hostvars[host].management_ip }}
+        name: {{ hostvars[host].ansible_hostname | default(host) }}
+        nodeid: {{ loop.index }}
+    }
+{% endfor %}
+}
+
+quorum {
+    provider: corosync_votequorum
+{% if masakari_corosync_two_node | bool %}
+    two_node: 1
+    wait_for_all: 0
+{% endif %}
+}
+
+logging {
+    to_syslog: yes
+    timestamp: on
+}

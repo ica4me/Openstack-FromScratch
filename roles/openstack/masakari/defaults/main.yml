@@ -1,0 +1,75 @@
+---
+masakari_controller_packages:
+  - masakari-api
+  - masakari-engine
+  - python3-masakari
+  - python3-masakariclient
+  - python3-pymysql
+
+masakari_compute_packages:
+  - masakari-monitors-common
+  - masakari-host-monitor
+  - masakari-instance-monitor
+  - python3-masakari-monitors
+  - python3-masakariclient
+  - python3-libvirt
+  - corosync
+  - pacemaker
+  - crmsh
+  - resource-agents
+
+masakari_dashboard_packages:
+  - python3-pip
+  - python3-wheel
+  - curl
+
+masakari_conf_path: /etc/masakari/masakari.conf
+masakari_monitors_conf_path: /etc/masakari/masakarimonitors.conf
+masakari_db_sync_marker: /var/lib/masakari/.db_synced
+
+masakari_api_bind_host: "{{ management_ip }}"
+masakari_api_bind_port: "{{ masakari_api_port | default(15868) }}"
+
+masakari_controller_services:
+  - masakari-api
+  - masakari-engine
+
+masakari_compute_services:
+  - masakari-host-monitor
+  - masakari-instance-monitor
+
+masakari_api_service: masakari-api
+
+masakari_enable_compute_pacemaker: true
+masakari_corosync_cluster_name: openstack-compute-ha
+masakari_corosync_token: 10000
+masakari_corosync_consensus: 12000
+masakari_corosync_two_node: true
+
+masakari_ha_metadata_key: HA_Enabled
+masakari_evacuate_all_instances: false
+masakari_process_all_instances: false
+masakari_ignore_error_instances: true
+
+masakari_segment_name: compute-ha-segment
+masakari_segment_recovery_method: auto
+masakari_segment_service_type: COMPUTE
+
+masakari_dashboard_enabled: true
+masakari_dashboard_tarball: "https://tarballs.opendev.org/openstack/masakari-dashboard/masakari-dashboard-stable-2024.1.tar.gz"
+
+admin_openrc_path: /root/admin-openrc
+bootstrap_controller: "{{ groups['controllers'][0] }}"
+openstack_domain: Default
+openstack_region: RegionOne
+db_host: "{{ vip_internal }}"
+
+rabbitmq_openstack_user: openstack
+rabbitmq_openstack_password: "{{ vault_rabbitmq_openstack_password }}"
+masakari_transport_url: "rabbit://{% for host in groups['controllers'] %}{{ rabbitmq_openstack_user }}:{{ rabbitmq_openstack_password }}@{{ hostvars[host].management_ip }}:5672{% if not loop.last %},{% endif %}{% endfor %}/"
+
+masakari_memcached_servers: >-
+  {{ groups['controllers']
+     | map('extract', hostvars, 'management_ip')
+     | map('regex_replace', '$', ':11211')
+     | join(',') }}

@@ -205,3 +205,41 @@ ceilometer_service_name: ceilometer
 ceilometer_service_type: metering
 ceilometer_service_description: "OpenStack Telemetry Service"
 ceilometer_service_password: "{{ vault_ceilometer_service_password }}"
+
+
+# Masakari / Instance HA
+masakari_database_name: masakari
+masakari_database_user: masakari
+masakari_db_password: "{{ vault_masakari_db_password }}"
+
+masakari_service_name: masakari
+masakari_service_type: instance-ha
+masakari_service_description: "OpenStack Instance High Availability Service"
+masakari_service_user: masakari
+masakari_service_password: "{{ vault_masakari_service_password }}"
+
+masakari_api_port: 15868
+masakari_endpoint: "http://{{ internal_vip | default(vip_internal) }}:15868/v1/%(tenant_id)s"
+
+# Recovery policy:
+# False = hanya instance dengan metadata HA_Enabled=True yang diproses.
+masakari_ha_metadata_key: HA_Enabled
+masakari_evacuate_all_instances: false
+masakari_process_all_instances: false
+masakari_ignore_error_instances: true
+
+# Failover segment
+masakari_segment_name: compute-ha-segment
+masakari_segment_recovery_method: auto
+masakari_segment_service_type: COMPUTE
+
+# Pacemaker/Corosync untuk compute host failure detection
+masakari_enable_compute_pacemaker: true
+masakari_corosync_cluster_name: openstack-compute-ha
+masakari_corosync_token: 10000
+masakari_corosync_consensus: 12000
+masakari_corosync_two_node: true
+
+# Horizon plugin
+masakari_dashboard_enabled: true
+masakari_dashboard_tarball: "https://tarballs.opendev.org/openstack/masakari-dashboard/masakari-dashboard-stable-2024.1.tar.gz"

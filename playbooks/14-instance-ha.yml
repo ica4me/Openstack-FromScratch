@@ -1,0 +1,50 @@
+---
+- name: Phase 14 - Instance HA / Masakari
+  hosts: controllers:computes
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Include Masakari role
+      ansible.builtin.include_role:
+        name: openstack/masakari
+
+- name: Phase 14 validation
+  hosts: controllers[0]
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Validate Masakari service catalog and segment
+      ansible.builtin.shell: |
+        . {{ admin_openrc_path | default('/root/admin-openrc') }}
+        echo "=== Service ==="
+        openstack service show masakari -f yaml
+        echo "=== Endpoints ==="
+        openstack endpoint list --service masakari
+        echo "=== Segment ==="
+        openstack segment show {{ masakari_segment_name | default('compute-ha-segment') }}
+        echo "=== Hosts ==="
+        SEG_ID=$(openstack segment show {{ masakari_segment_name | default('compute-ha-segment') }} -f value -c uuid)
+        openstack segment host list "$SEG_ID"
+      register: masakari_validation
+      changed_when: false
+
+    - name: Print Masakari validation
+      ansible.builtin.debug:
+        var: masakari_validation.stdout_lines
+
+    - name: Validate Masakari API root
+      ansible.builtin.uri:
+        url: "http://{{ internal_vip | default(vip_internal) }}:15868/"
+        status_code: [200, 300, 401, 403]
+        timeout: 30
+
+    - name: Print Instance HA phase summary
+      ansible.builtin.debug:
+        msg:
+          - "Instance HA / Masakari phase completed."
+          - "Masakari endpoint: http://{{ internal_vip | default(vip_internal) }}:15868/v1/%(tenant_id)s"
+          - "Recovery policy: only instances with metadata {{ masakari_ha_metadata_key | default('HA_Enabled') }}=True"
+          - "Pacemaker/Corosync: enabled on computes"
+          - "Dashboard plugin: enabled on Horizon controllers"
