@@ -21,6 +21,18 @@
   become: true
   gather_facts: false
 
+  vars:
+    neutron_expected_controller_hosts:
+      - controller-01
+      - controller-02
+      - controller-03
+
+    neutron_expected_compute_hosts:
+      - compute-01
+      - compute-02
+
+    neutron_expected_ovs_hosts: "{{ neutron_expected_controller_hosts + neutron_expected_compute_hosts }}"
+
   tasks:
     - name: Validate Neutron API through VIP
       ansible.builtin.uri:
@@ -32,25 +44,146 @@
           - 401
         timeout: 10
 
-    - name: Validate Neutron agents
+    - name: Validate Neutron agents as JSON
       ansible.builtin.shell: |
-        . /root/admin-openrc
-        openstack network agent list
-      register: neutron_agent_list
+        set -e
+        . {{ admin_openrc_path | default('/root/admin-openrc') }}
+        openstack network agent list -f json
+      args:
+        executable: /bin/bash
+      register: neutron_agent_json
       changed_when: false
+      run_once: true
+      delegate_to: "{{ bootstrap_controller | default(groups['controllers'][0]) }}"
 
-    - name: Print Neutron agents
+    - name: Parse Neutron agents
+      ansible.builtin.set_fact:
+        neutron_agents: "{{ neutron_agent_json.stdout | from_json }}"
+      run_once: true
+
+    - name: Build OVS agent host list
+      ansible.builtin.set_fact:
+        neutron_ovs_agent_hosts: >-
+          {{
+            neutron_agents
+            | selectattr('Agent Type', 'equalto', 'Open vSwitch agent')
+            | map(attribute='Host')
+            | list
+          }}
+      run_once: true
+
+    - name: Build alive OVS agent host list
+      ansible.builtin.set_fact:
+        neutron_alive_ovs_agent_hosts: >-
+          {{
+            neutron_agents
+            | selectattr('Agent Type', 'equalto', 'Open vSwitch agent')
+            | selectattr('Alive', 'equalto', true)
+            | selectattr('State', 'equalto', true)
+            | map(attribute='Host')
+            | list
+          }}
+      run_once: true
+
+    - name: Print Neutron OVS agents summary
       ansible.builtin.debug:
-        var: neutron_agent_list.stdout_lines
+        msg:
+          - "OVS agent hosts detected: {{ neutron_ovs_agent_hosts | join(', ') }}"
+          - "OVS agent hosts alive/up: {{ neutron_alive_ovs_agent_hosts | join(', ') }}"
+          - "Expected OVS hosts: {{ neutron_expected_ovs_hosts | join(', ') }}"
+      run_once: true
 
-    - name: Assert expected OVS agents are visible
+    - name: Print all Neutron agents
+      ansible.builtin.debug:
+        var: neutron_agents
+      run_once: true
+
+    - name: Assert controller and compute OVS agents are registered and alive
       ansible.builtin.assert:
         that:
-          - "'Open vSwitch agent' in neutron_agent_list.stdout"
-          - "'L3 agent' in neutron_agent_list.stdout"
-          - "'DHCP agent' in neutron_agent_list.stdout"
-          - "'Metadata agent' in neutron_agent_list.stdout"
-        fail_msg: "Neutron agents belum lengkap. Cek neutron-server, ovs-agent, l3-agent, dhcp-agent, metadata-agent."
+          - "(neutron_expected_ovs_hosts | difference(neutron_alive_ovs_agent_hosts)) | length == 0"
+        fail_msg: |
+          Neutron OVS agent belum lengkap atau belum Alive/UP.
+
+          Expected:
+          {{ neutron_expected_ovs_hosts | join(', ') }}
+
+          Detected OVS:
+          {{ neutron_ovs_agent_hosts | join(', ') }}
+
+          Alive/UP OVS:
+          {{ neutron_alive_ovs_agent_hosts | join(', ') }}
+
+          Missing:
+          {{ neutron_expected_ovs_hosts | difference(neutron_alive_ovs_agent_hosts) | join(', ') }}
+
+          Debug manual:
+          source {{ admin_openrc_path | default('/root/admin-openrc') }}
+          openstack network agent list --agent-type open-vswitch
+          openstack network agent list --host compute-01
+          openstack network agent list --host compute-02
+      run_once: true
+
+    - name: Build L3 agent host list
+      ansible.builtin.set_fact:
+        neutron_l3_agent_hosts: >-
+          {{
+            neutron_agents
+            | selectattr('Agent Type', 'equalto', 'L3 agent')
+            | selectattr('Alive', 'equalto', true)
+            | selectattr('State', 'equalto', true)
+            | map(attribute='Host')
+            | list
+          }}
+      run_once: true
+
+    - name: Build DHCP agent host list
+      ansible.builtin.set_fact:
+        neutron_dhcp_agent_hosts: >-
+          {{
+            neutron_agents
+            | selectattr('Agent Type', 'equalto', 'DHCP agent')
+            | selectattr('Alive', 'equalto', true)
+            | selectattr('State', 'equalto', true)
+            | map(attribute='Host')
+            | list
+          }}
+      run_once: true
+
+    - name: Build Metadata agent host list
+      ansible.builtin.set_fact:
+        neutron_metadata_agent_hosts: >-
+          {{
+            neutron_agents
+            | selectattr('Agent Type', 'equalto', 'Metadata agent')
+            | selectattr('Alive', 'equalto', true)
+            | selectattr('State', 'equalto', true)
+            | map(attribute='Host')
+            | list
+          }}
+      run_once: true
+
+    - name: Assert controller L3 DHCP Metadata agents are alive
+      ansible.builtin.assert:
+        that:
+          - "(neutron_expected_controller_hosts | difference(neutron_l3_agent_hosts)) | length == 0"
+          - "(neutron_expected_controller_hosts | difference(neutron_dhcp_agent_hosts)) | length == 0"
+          - "(neutron_expected_controller_hosts | difference(neutron_metadata_agent_hosts)) | length == 0"
+        fail_msg: |
+          Neutron controller agents belum lengkap.
+
+          Expected controller hosts:
+          {{ neutron_expected_controller_hosts | join(', ') }}
+
+          L3 alive/up:
+          {{ neutron_l3_agent_hosts | join(', ') }}
+
+          DHCP alive/up:
+          {{ neutron_dhcp_agent_hosts | join(', ') }}
+
+          Metadata alive/up:
+          {{ neutron_metadata_agent_hosts | join(', ') }}
+      run_once: true
 
     - name: Print Neutron phase summary
       ansible.builtin.debug:
@@ -59,5 +192,6 @@
           - "Endpoint: {{ service_endpoints.neutron }}"
           - "Provider bridge: {{ neutron_external_bridge }}"
           - "Provider physnet: {{ neutron_provider_physnet }}"
-          - "Tunnel type: {{ neutron_tunnel_types | join(',') }}"
+          - "Tunnel type: {% if neutron_tunnel_types is string %}{{ neutron_tunnel_types }}{% else %}{{ neutron_tunnel_types | join(',') }}{% endif %}"
+          - "OVS agents alive/up: {{ neutron_alive_ovs_agent_hosts | join(', ') }}"
           - "VXLAN local IP uses each node management_ip"

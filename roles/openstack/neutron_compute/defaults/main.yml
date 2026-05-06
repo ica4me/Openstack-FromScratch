@@ -1,6 +1,9 @@
 ---
 neutron_packages_compute:
   - neutron-openvswitch-agent
+  - openvswitch-switch
+  - crudini
+  - sudo
 
 rabbitmq_openstack_user: openstack
 rabbitmq_openstack_password: "{{ vault_rabbitmq_openstack_password }}"
@@ -14,3 +17,15 @@ neutron_metadata_secret: "{{ vault_metadata_secret }}"
 
 neutron_services_compute:
   - neutron-openvswitch-agent
+
+# Sesuai network public Anda:
+# provider:physical_network = provider
+neutron_external_bridge: br-ex
+provider_iface: ens20
+neutron_bridge_mappings:
+  - provider:br-ex
+
+neutron_local_ip: "{{ management_ip }}"
+neutron_tunnel_types: vxlan
+neutron_l2_population: true
+neutron_firewall_driver: openvswitch

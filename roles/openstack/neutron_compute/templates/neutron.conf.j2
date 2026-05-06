@@ -4,6 +4,20 @@
 transport_url = rabbit://{% for host in groups['controllers'] %}{{ rabbitmq_openstack_user }}:{{ rabbitmq_openstack_password }}@{{ hostvars[host].management_ip }}:5672{% if not loop.last %},{% endif %}{% endfor %}/
 auth_strategy = keystone
 
+#[keystone_authtoken]
+#www_authenticate_uri = {{ service_endpoints.keystone | regex_replace('/v3$', '') }}
+#auth_url = {{ service_endpoints.keystone }}
+#memcached_servers = {{ memcached_servers }}
+#auth_type = password
+#project_domain_name = {{ openstack_domain }}
+#user_domain_name = {{ openstack_domain }}
+#project_name = service
+#username = neutron
+#password = {{ neutron_service_password }}
+
+#[oslo_concurrency]
+#lock_path = /var/lib/neutron/tmp
+
 [keystone_authtoken]
 www_authenticate_uri = {{ service_endpoints.keystone | regex_replace('/v3$', '') }}
 auth_url = {{ service_endpoints.keystone }}
@@ -14,6 +28,11 @@ user_domain_name = {{ openstack_domain }}
 project_name = service
 username = neutron
 password = {{ neutron_service_password }}
+service_token_roles_required = true
+
+[agent]
+root_helper = sudo /usr/bin/neutron-rootwrap /etc/neutron/rootwrap.conf
+root_helper_daemon = sudo /usr/bin/neutron-rootwrap-daemon /etc/neutron/rootwrap.conf
 
 [oslo_concurrency]
 lock_path = /var/lib/neutron/tmp

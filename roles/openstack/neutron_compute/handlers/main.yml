@@ -1,0 +1,10 @@
+---
+- name: Restart Neutron OVS agent
+  ansible.builtin.service:
+    name: neutron-openvswitch-agent
+    state: restarted
+
+- name: Restart Nova compute
+  ansible.builtin.service:
+    name: nova-compute
+    state: restarted

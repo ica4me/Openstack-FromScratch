@@ -1,14 +1,23 @@
-# Managed by Ansible - Neutron OVS agent compute config
+# Managed by Ansible - Neutron OVS Agent
 
-[ovs]
-bridge_mappings = {{ neutron_bridge_mappings | join(',') }}
-local_ip = {{ neutron_local_ip }}
+[DEFAULT]
 
 [agent]
+{% if neutron_tunnel_types | type_debug == 'list' %}
 tunnel_types = {{ neutron_tunnel_types | join(',') }}
-l2_population = true
-prevent_arp_spoofing = true
+{% else %}
+tunnel_types = {{ neutron_tunnel_types | default('vxlan') }}
+{% endif %}
+l2_population = {{ neutron_l2_population | default('true') | bool | lower }}
+
+[ovs]
+local_ip = {{ neutron_local_ip | default(management_ip) }}
+{% if neutron_bridge_mappings | type_debug == 'list' %}
+bridge_mappings = {{ neutron_bridge_mappings | join(',') }}
+{% else %}
+bridge_mappings = {{ neutron_bridge_mappings | default('provider:br-ex') }}
+{% endif %}
 
 [securitygroup]
+firewall_driver = {{ neutron_firewall_driver | default('openvswitch') }}
 enable_security_group = true
-firewall_driver = openvswitch

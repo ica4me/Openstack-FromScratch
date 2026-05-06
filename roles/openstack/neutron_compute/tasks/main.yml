@@ -15,9 +15,31 @@
   ansible.builtin.apt:
     name: "{{ neutron_packages_compute }}"
     state: present
-    update_cache: true
+    update_cache: false
     cache_valid_time: 3600
     lock_timeout: 300
+  retries: 3
+  delay: 10
+  register: neutron_compute_pkg_result
+  until: neutron_compute_pkg_result is succeeded
+
+- name: Ensure Open vSwitch service is running
+  ansible.builtin.service:
+    name: openvswitch-switch
+    state: started
+    enabled: true
+
+- name: Ensure Neutron runtime directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: neutron
+    group: neutron
+    mode: "0755"
+  loop:
+    - /var/lock/neutron
+    - /var/log/neutron
+    - /var/lib/neutron
 
 - name: Deploy neutron.conf on compute
   ansible.builtin.template:
@@ -28,6 +50,29 @@
     mode: "0640"
     backup: true
   no_log: true
+  notify: Restart Neutron OVS agent
+
+- name: Ensure Neutron rootwrap helper is configured
+  ansible.builtin.blockinfile:
+    path: "{{ neutron_conf_path }}"
+    marker: "# {mark} ANSIBLE MANAGED NEUTRON ROOTWRAP"
+    block: |
+      [agent]
+      root_helper = sudo /usr/bin/neutron-rootwrap /etc/neutron/rootwrap.conf
+      root_helper_daemon = sudo /usr/bin/neutron-rootwrap-daemon /etc/neutron/rootwrap.conf
+    backup: true
+  notify: Restart Neutron OVS agent
+
+- name: Ensure Neutron sudoers for rootwrap exists
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/neutron-rootwrap
+    owner: root
+    group: root
+    mode: "0440"
+    content: |
+      neutron ALL = (root) NOPASSWD: /usr/bin/neutron-rootwrap /etc/neutron/rootwrap.conf *
+      neutron ALL = (root) NOPASSWD: /usr/bin/neutron-rootwrap-daemon /etc/neutron/rootwrap.conf
+  notify: Restart Neutron OVS agent
 
 - name: Deploy OVS agent config on compute
   ansible.builtin.template:
@@ -37,25 +82,22 @@
     group: neutron
     mode: "0640"
     backup: true
+  notify: Restart Neutron OVS agent
 
 - name: Ensure br-ex exists
-  ansible.builtin.command: "ovs-vsctl br-exists {{ neutron_external_bridge }}"
-  register: neutron_compute_br_ex_check
-  failed_when: false
+  ansible.builtin.command: "ovs-vsctl --may-exist add-br {{ neutron_external_bridge }}"
   changed_when: false
 
-- name: Create br-ex when missing
-  ansible.builtin.command: "ovs-vsctl add-br {{ neutron_external_bridge }}"
-  when: neutron_compute_br_ex_check.rc != 0
-
-- name: Check br-ex ports
-  ansible.builtin.command: "ovs-vsctl list-ports {{ neutron_external_bridge }}"
-  register: neutron_compute_br_ex_ports
+- name: Ensure provider interface is attached to br-ex
+  ansible.builtin.command: "ovs-vsctl --may-exist add-port {{ neutron_external_bridge }} {{ provider_iface }}"
   changed_when: false
 
-- name: Attach provider interface to br-ex
-  ansible.builtin.command: "ovs-vsctl add-port {{ neutron_external_bridge }} {{ provider_iface }}"
-  when: provider_iface not in neutron_compute_br_ex_ports.stdout_lines
+- name: Bring OVS interfaces up
+  ansible.builtin.shell: |
+    ip link set {{ provider_iface }} up || true
+    ip link set {{ neutron_external_bridge }} up || true
+    ip link set br-int up || true
+  changed_when: false
 
 - name: Configure Nova compute to use Neutron
   ansible.builtin.blockinfile:
@@ -73,28 +115,32 @@
       password = {{ neutron_service_password }}
     backup: true
   no_log: true
+  notify: Restart Nova compute
 
-- name: Restart Nova compute after Neutron integration
-  ansible.builtin.service:
-    name: nova-compute
-    state: restarted
-    enabled: true
 
-- name: Restart Neutron compute services
+- name: Flush Neutron compute handlers
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure Neutron compute services are enabled and started
   ansible.builtin.service:
     name: "{{ item }}"
-    state: restarted
+    state: started
     enabled: true
   loop: "{{ neutron_services_compute }}"
 
-- name: Validate OVS agent is active
-  ansible.builtin.command: systemctl is-active neutron-openvswitch-agent
+- name: Wait until Neutron OVS agent stays active
+  ansible.builtin.shell: |
+    sleep 10
+    systemctl is-active neutron-openvswitch-agent
   changed_when: false
 
 - name: Print Neutron compute summary
-  ansible.builtin.debug:
-    msg:
-      - "Neutron compute configured on {{ inventory_hostname }}"
-      - "Provider bridge: {{ neutron_external_bridge }}"
-      - "Bridge mappings: {{ neutron_bridge_mappings | join(',') }}"
-      - "VXLAN local IP: {{ neutron_local_ip }}"
+  ansible.builtin.shell: |
+    echo "hostname=$(hostname)"
+    echo "provider_bridge={{ neutron_external_bridge }}"
+    echo "bridge_mappings={{ neutron_bridge_mappings | join(',') }}"
+    echo "local_ip={{ neutron_local_ip }}"
+    grep -nE "transport_url|root_helper|root_helper_daemon" /etc/neutron/neutron.conf | sed "s/password = .*/password = ***MASKED***/" || true
+    grep -nE "bridge_mappings|local_ip|tunnel_types|l2_population|firewall_driver" /etc/neutron/plugins/ml2/openvswitch_agent.ini || true
+    ovs-vsctl show
+  changed_when: false

@@ -1,0 +1,64 @@
+---
+- name: Phase 10 - Neutron Controller
+  hosts: controllers
+  become: true
+  gather_facts: true
+  serial: 1
+
+  roles:
+    - role: openstack/neutron_controller
+
+- name: Phase 10 - Neutron Compute
+  hosts: computes
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: openstack/neutron_compute
+
+- name: Phase 10 - Final Neutron validation
+  hosts: "{{ groups['controllers'][0] }}"
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Validate Neutron API through VIP
+      ansible.builtin.uri:
+        url: "{{ service_endpoints.neutron }}"
+        method: GET
+        status_code:
+          - 200
+          - 300
+          - 401
+        timeout: 10
+
+#    - name: Validate Neutron agents
+#      ansible.builtin.shell: |
+#        . /root/admin-openrc
+#        openstack network agent list
+#      register: neutron_agent_list
+#      changed_when: false
+#
+#    - name: Print Neutron agents
+#      ansible.builtin.debug:
+#        var: neutron_agent_list.stdout_lines
+#
+#    - name: Assert expected OVS agents are visible
+#      ansible.builtin.assert:
+#        that:
+#          - "'Open vSwitch agent' in neutron_agent_list.stdout"
+#          - "'L3 agent' in neutron_agent_list.stdout"
+#          - "'DHCP agent' in neutron_agent_list.stdout"
+#          - "'Metadata agent' in neutron_agent_list.stdout"
+#        fail_msg: "Neutron agents belum lengkap. Cek neutron-server, ovs-agent, l3-agent, dhcp-agent, metadata-agent."
+
+
+    - name: Print Neutron phase summary
+      ansible.builtin.debug:
+        msg:
+          - "Neutron phase completed."
+          - "Endpoint: {{ service_endpoints.neutron }}"
+          - "Provider bridge: {{ neutron_external_bridge }}"
+          - "Provider physnet: {{ neutron_provider_physnet }}"
+          - "Tunnel type: {{ neutron_tunnel_types | join(',') }}"
+          - "VXLAN local IP uses each node management_ip"
