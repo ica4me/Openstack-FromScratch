@@ -1,0 +1,26 @@
+---
+validate_admin_openrc_path: "{{ admin_openrc_path | default('/root/admin-openrc') }}"
+validate_region: "{{ openstack_region | default('RegionOne') }}"
+validate_vip_internal: "{{ internal_vip | default(vip_internal) }}"
+
+validate_required_services:
+  - keystone
+  - glance
+  - placement
+  - nova
+  - neutron
+  - cinder
+  - gnocchi
+  - aodh
+  - masakari
+
+validate_required_endpoint_ports:
+  - "5000"
+  - "9292"
+  - "8778"
+  - "8774"
+  - "9696"
+  - "8776"
+  - "8041"
+  - "8042"
+  - "15868"

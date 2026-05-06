@@ -1,0 +1,98 @@
+---
+- name: Basic non-destructive smoke test
+  ansible.builtin.shell: |
+    set -e
+    . {{ validate_admin_openrc_path }}
+
+    echo "=== token ==="
+    openstack token issue -f value -c id >/dev/null
+
+    echo "=== images ==="
+    openstack image list
+
+    echo "=== flavors ==="
+    openstack flavor list
+
+    echo "=== networks ==="
+    openstack network list
+
+    echo "=== subnets ==="
+    openstack subnet list
+
+    echo "=== servers ==="
+    openstack server list --all-projects
+
+    echo "=== volumes ==="
+    openstack volume list --all-projects
+
+    echo "=== hypervisors ==="
+    openstack hypervisor list
+
+    echo "Basic smoke OK"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Optional create/delete Neutron test network
+  ansible.builtin.shell: |
+    set -e
+    . {{ validate_admin_openrc_path }}
+
+    if openstack network show {{ validate_temp_network }} >/dev/null 2>&1; then
+      echo "Network {{ validate_temp_network }} already exists, skipping create."
+    else
+      openstack network create {{ validate_temp_network }}
+      openstack subnet create {{ validate_temp_subnet }} \
+        --network {{ validate_temp_network }} \
+        --subnet-range {{ validate_temp_cidr }} \
+        --gateway {{ validate_temp_gateway }}
+    fi
+
+    openstack subnet show {{ validate_temp_subnet }}
+    openstack network show {{ validate_temp_network }}
+
+    openstack subnet delete {{ validate_temp_subnet }}
+    openstack network delete {{ validate_temp_network }}
+
+    echo "Neutron create/delete smoke OK"
+  args:
+    executable: /bin/bash
+  changed_when: true
+  when: validate_create_temp_resources | bool
+
+- name: Optional create/delete Cinder test volume
+  ansible.builtin.shell: |
+    set -e
+    . {{ validate_admin_openrc_path }}
+
+    if openstack volume show {{ validate_temp_volume }} >/dev/null 2>&1; then
+      openstack volume delete {{ validate_temp_volume }} --force || true
+      sleep 5
+    fi
+
+    openstack volume create --size {{ validate_temp_volume_size_gb }} {{ validate_temp_volume }}
+
+    for i in $(seq 1 60); do
+      status=$(openstack volume show {{ validate_temp_volume }} -f value -c status || true)
+      echo "volume_status=$status"
+      if [ "$status" = "available" ]; then
+        break
+      fi
+      sleep 5
+    done
+
+    test "$(openstack volume show {{ validate_temp_volume }} -f value -c status)" = "available"
+
+    openstack volume delete {{ validate_temp_volume }}
+    echo "Cinder create/delete smoke OK"
+  args:
+    executable: /bin/bash
+  changed_when: true
+  when: validate_create_temp_resources | bool
+
+- name: Print smoke test summary
+  ansible.builtin.debug:
+    msg:
+      - "Smoke tests completed."
+      - "validate_create_temp_resources={{ validate_create_temp_resources }}"
+      - "Default mode is read-only/non-destructive."

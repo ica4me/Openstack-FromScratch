@@ -1,0 +1,230 @@
+---
+- name: Assert admin openrc exists
+  ansible.builtin.stat:
+    path: "{{ validate_admin_openrc_path }}"
+  register: validate_admin_openrc_stat
+
+- name: Fail if admin openrc missing
+  ansible.builtin.assert:
+    that:
+      - validate_admin_openrc_stat.stat.exists
+    fail_msg: "{{ validate_admin_openrc_path }} tidak ditemukan."
+
+- name: Validate OpenStack CLI authentication
+  ansible.builtin.shell: |
+    set -e
+    . {{ validate_admin_openrc_path }}
+    openstack token issue -f value -c id >/dev/null
+    echo "OpenStack token OK"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Validate OpenStack service catalog
+  ansible.builtin.shell: |
+    set -e
+    . {{ validate_admin_openrc_path }}
+
+    echo "=== service list ==="
+    openstack service list
+
+    {% for svc in validate_required_services %}
+    echo "checking service {{ svc }}"
+    openstack service list -f value -c Name | grep -qx "{{ svc }}"
+    {% endfor %}
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Validate OpenStack endpoints
+  ansible.builtin.shell: |
+    set -e
+    . {{ validate_admin_openrc_path }}
+
+    echo "=== endpoint list ==="
+    openstack endpoint list
+
+    {% for port in validate_required_endpoint_ports %}
+    echo "checking endpoint port {{ port }}"
+    openstack endpoint list -f value -c URL | grep -q ":{{ port }}"
+    {% endfor %}
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Validate endpoint duplication count
+  ansible.builtin.shell: |
+    set -e
+    . {{ validate_admin_openrc_path }}
+
+    echo "=== endpoint duplicate summary ==="
+    openstack endpoint list -f value -c "Service Name" -c Interface -c URL \
+      | sort \
+      | uniq -c
+
+    DUP_COUNT=$(openstack endpoint list -f value -c "Service Name" -c Interface -c URL \
+      | sort \
+      | uniq -c \
+      | awk '$1 > 1 {count++} END {print count + 0}')
+
+    echo "duplicate_endpoint_tuple_count=$DUP_COUNT"
+    test "$DUP_COUNT" = "0"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Validate Keystone
+  ansible.builtin.shell: |
+    set -e
+    . {{ validate_admin_openrc_path }}
+
+    openstack project list >/dev/null
+    openstack user list >/dev/null
+    openstack role list >/dev/null
+
+    echo "Keystone OK"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Validate Glance
+  ansible.builtin.shell: |
+    set -e
+    . {{ validate_admin_openrc_path }}
+
+    openstack image list
+    echo "Glance OK"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Validate Placement
+  ansible.builtin.shell: |
+    set -e
+    . {{ validate_admin_openrc_path }}
+
+    openstack resource provider list
+    echo "Placement OK"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Validate Nova services
+  ansible.builtin.shell: |
+    set -e
+    . {{ validate_admin_openrc_path }}
+
+    echo "=== compute service list ==="
+    openstack compute service list
+
+    openstack compute service list -f value -c Binary -c State | grep -q "nova-compute up"
+    openstack hypervisor list
+
+    echo "Nova OK"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Validate Neutron agents and networks
+  ansible.builtin.shell: |
+    set -e
+    . {{ validate_admin_openrc_path }}
+
+    echo "=== network agent list ==="
+    openstack network agent list
+
+    openstack network list
+    openstack subnet list
+
+    echo "Neutron OK"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Validate Cinder services
+  ansible.builtin.shell: |
+    set -e
+    . {{ validate_admin_openrc_path }}
+
+    echo "=== volume service list ==="
+    openstack volume service list
+
+    openstack volume service list -f value -c Binary -c State | grep -Eq "cinder-(scheduler|volume) up"
+    openstack volume type list
+
+    echo "Cinder OK"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Validate Gnocchi
+  ansible.builtin.shell: |
+    set -e
+    . {{ validate_admin_openrc_path }}
+
+    curl -fsS --max-time 15 http://{{ validate_vip_internal }}:8041/ >/dev/null
+    gnocchi status
+
+    echo "Gnocchi OK"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Validate Aodh
+  ansible.builtin.shell: |
+    set -e
+    . {{ validate_admin_openrc_path }}
+
+    curl -fsS --max-time 15 http://{{ validate_vip_internal }}:8042/ >/dev/null
+
+    if openstack alarm list >/dev/null 2>&1; then
+      openstack alarm list
+    elif command -v aodh >/dev/null 2>&1; then
+      aodh alarm list || true
+    else
+      echo "Aodh CLI plugin tidak tersedia, API root sudah OK."
+    fi
+
+    echo "Aodh OK"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Validate Masakari service and segment
+  ansible.builtin.shell: |
+    set -e
+    . {{ validate_admin_openrc_path }}
+
+    curl -fsS --max-time 15 http://{{ validate_vip_internal }}:15868/ >/dev/null
+
+    echo "=== Masakari service ==="
+    openstack service list | egrep 'masakari|instance-ha'
+
+    echo "=== Masakari endpoint ==="
+    openstack endpoint list --service masakari
+
+    echo "=== Masakari segment ==="
+    openstack segment list
+    openstack segment show compute-ha-segment
+
+    echo "=== Masakari hosts ==="
+    SEG_ID=$(openstack segment show compute-ha-segment -f value -c uuid)
+    openstack segment host list "$SEG_ID"
+
+    openstack segment host list "$SEG_ID" -f value -c name | grep -qx "compute-01"
+    openstack segment host list "$SEG_ID" -f value -c name | grep -qx "compute-02"
+
+    echo "Masakari OK"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Print OpenStack CLI validation summary
+  ansible.builtin.debug:
+    msg:
+      - "OpenStack CLI validation completed."
+      - "Service catalog OK."
+      - "Endpoints OK."
+      - "Keystone/Glance/Placement/Nova/Neutron/Cinder OK."
+      - "Telemetry OK."
+      - "Masakari OK."

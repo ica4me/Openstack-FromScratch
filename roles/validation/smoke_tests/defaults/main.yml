@@ -1,0 +1,14 @@
+---
+validate_admin_openrc_path: "{{ admin_openrc_path | default('/root/admin-openrc') }}"
+
+# Non-destruktif default: hanya list/show. Ubah true jika nanti ingin create/delete test resource.
+validate_create_temp_resources: false
+
+validate_temp_prefix: validate99
+validate_temp_network: "{{ validate_temp_prefix }}-net"
+validate_temp_subnet: "{{ validate_temp_prefix }}-subnet"
+validate_temp_router: "{{ validate_temp_prefix }}-router"
+validate_temp_volume: "{{ validate_temp_prefix }}-volume"
+validate_temp_volume_size_gb: 1
+validate_temp_cidr: "192.168.199.0/24"
+validate_temp_gateway: "192.168.199.1"

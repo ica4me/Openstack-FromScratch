@@ -1,0 +1,33 @@
+---
+validate_admin_openrc_path: "{{ admin_openrc_path | default('/root/admin-openrc') }}"
+validate_vip_internal: "{{ internal_vip | default(vip_internal) }}"
+
+validate_controller_services:
+  - keepalived
+  - haproxy
+  - mariadb
+  - rabbitmq-server
+  - memcached
+  - apache2
+
+validate_compute_services:
+  - nova-compute
+  - neutron-openvswitch-agent
+  - masakari-host-monitor
+  - masakari-instance-monitor
+  - corosync
+  - pacemaker
+
+validate_controller_api_ports:
+  - { name: keystone_public, port: 5000, path: /v3, ok: "200" }
+  - { name: glance_api, port: 9292, path: /, ok_regex: "^(200|300|401|403)$" }
+  - { name: placement_api, port: 8778, path: /, ok_regex: "^(200|300|401|403)$" }
+  - { name: nova_api, port: 8774, path: /, ok_regex: "^(200|300|401|403)$" }
+  - { name: neutron_api, port: 9696, path: /, ok_regex: "^(200|300|401|403)$" }
+  - { name: cinder_api, port: 8776, path: /, ok_regex: "^(200|300|401|403)$" }
+  - { name: gnocchi_api, port: 8041, path: /, ok_regex: "^(200|300|401|403)$" }
+  - { name: aodh_api, port: 8042, path: /, ok_regex: "^(200|300|401|403)$" }
+  - { name: masakari_api, port: 15868, path: /, ok_regex: "^(200|300|401|403)$" }
+
+validate_horizon_url: "http://{{ validate_vip_internal }}/horizon/"
+validate_horizon_static_url: "http://{{ validate_vip_internal }}/horizon/static/dashboard/img/logo-splash.svg"

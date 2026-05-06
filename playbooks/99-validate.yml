@@ -1,0 +1,21 @@
+---
+- name: Phase 99a - Validate host and service layer
+  hosts: all
+  become: true
+  gather_facts: true
+  roles:
+    - role: validation/service_checks
+
+- name: Phase 99b - Validate OpenStack control plane
+  hosts: "{{ groups['controllers'][0] }}"
+  become: true
+  gather_facts: false
+  roles:
+    - role: validation/openstack_cli
+
+- name: Phase 99c - OpenStack smoke tests
+  hosts: "{{ groups['controllers'][0] }}"
+  become: true
+  gather_facts: false
+  roles:
+    - role: validation/smoke_tests

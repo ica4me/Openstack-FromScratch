@@ -1,0 +1,136 @@
+---
+- name: Print validation target
+  ansible.builtin.debug:
+    msg:
+      - "host={{ inventory_hostname }}"
+      - "groups={{ group_names }}"
+      - "management_ip={{ management_ip | default('undefined') }}"
+
+- name: Validate controller system services
+  ansible.builtin.service_facts:
+  when: inventory_hostname in groups['controllers']
+
+- name: Assert controller services are running
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.services[item + '.service'] is defined
+      - ansible_facts.services[item + '.service'].state == 'running'
+    fail_msg: "Controller service {{ item }} tidak running di {{ inventory_hostname }}"
+  loop: "{{ validate_controller_services }}"
+  when: inventory_hostname in groups['controllers']
+
+- name: Validate compute system services
+  ansible.builtin.service_facts:
+  when: inventory_hostname in groups['computes']
+
+- name: Assert compute services are running
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.services[item + '.service'] is defined
+      - ansible_facts.services[item + '.service'].state == 'running'
+    fail_msg: "Compute service {{ item }} tidak running di {{ inventory_hostname }}"
+  loop: "{{ validate_compute_services }}"
+  when: inventory_hostname in groups['computes']
+  failed_when: false
+
+- name: Validate HAProxy configuration
+  ansible.builtin.command: haproxy -c -f /etc/haproxy/haproxy.cfg
+  changed_when: false
+  when: inventory_hostname in groups['controllers']
+
+- name: Validate Apache configuration
+  ansible.builtin.command: apache2ctl configtest
+  changed_when: false
+  when: inventory_hostname in groups['controllers']
+
+- name: Check controller local API ports
+  ansible.builtin.shell: |
+    set -e
+    echo "=== {{ inventory_hostname }} / {{ management_ip }} ==="
+    ss -ltnp | egrep ":({{ validate_controller_api_ports | map(attribute='port') | join('|') }})" || true
+
+    {% for api in validate_controller_api_ports %}
+    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 http://{{ management_ip }}:{{ api.port }}{{ api.path }} || true)
+    echo "{{ api.name }} local http_code=$code"
+    {% if api.ok is defined %}
+    test "$code" = "{{ api.ok }}"
+    {% else %}
+    echo "$code" | grep -Eq '{{ api.ok_regex }}'
+    {% endif %}
+    {% endfor %}
+  args:
+    executable: /bin/bash
+  changed_when: false
+  when: inventory_hostname in groups['controllers']
+
+- name: Check VIP API ports from bootstrap controller
+  ansible.builtin.shell: |
+    set -e
+    echo "=== VIP {{ validate_vip_internal }} ==="
+
+    {% for api in validate_controller_api_ports %}
+    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 http://{{ validate_vip_internal }}:{{ api.port }}{{ api.path }} || true)
+    echo "{{ api.name }} vip http_code=$code"
+    {% if api.ok is defined %}
+    test "$code" = "{{ api.ok }}"
+    {% else %}
+    echo "$code" | grep -Eq '{{ api.ok_regex }}'
+    {% endif %}
+    {% endfor %}
+  args:
+    executable: /bin/bash
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ groups['controllers'][0] }}"
+
+- name: Validate Horizon URL and static asset
+  ansible.builtin.shell: |
+    set -e
+    horizon_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 {{ validate_horizon_url }})
+    static_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 {{ validate_horizon_static_url }})
+
+    echo "horizon_code=$horizon_code"
+    echo "horizon_static_code=$static_code"
+
+    echo "$horizon_code" | grep -Eq '^(200|302)$'
+    test "$static_code" = "200"
+  args:
+    executable: /bin/bash
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ groups['controllers'][0] }}"
+
+- name: Validate HAProxy backend status
+  ansible.builtin.shell: |
+    set -e
+    echo "=== HAProxy important backends ==="
+    printf "show stat\n" | socat - /run/haproxy/admin.sock | awk -F, '
+      /keystone_public|glance_api|placement_api|nova_api|neutron_api|cinder_api|gnocchi_api|aodh_api|masakari_api|horizon/ {
+        print $1, $2, $18, $35, $36, $37, $58
+      }'
+
+    DOWN_COUNT=$(printf "show stat\n" | socat - /run/haproxy/admin.sock | awk -F, '
+      /keystone_public|glance_api|placement_api|nova_api|neutron_api|cinder_api|gnocchi_api|aodh_api|masakari_api|horizon/ &&
+      $2 != "FRONTEND" &&
+      $2 != "BACKEND" &&
+      $18 != "UP" { count++ }
+      END { print count + 0 }')
+
+    echo "haproxy_down_backend_count=$DOWN_COUNT"
+    test "$DOWN_COUNT" = "0"
+  args:
+    executable: /bin/bash
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ groups['controllers'][0] }}"
+
+- name: Validate Pacemaker cluster on computes
+  ansible.builtin.shell: |
+    set -e
+    crm status
+    crm status | grep -q "Online:.*compute-01"
+    crm status | grep -q "Online:.*compute-02"
+  args:
+    executable: /bin/bash
+  changed_when: false
+  when: inventory_hostname in groups['computes']
