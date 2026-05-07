@@ -87,6 +87,7 @@ Kalau nama NIC di server berbeda, ubah di `inventories/lab-5node/hosts.yml` dan 
 <p align="center">
  <img src="https://github.com/ica4me/Openstack-FromScratch/raw/main/Documentation/files/019dd308-391f-7131-ac66-2dd4d8643f9e/image.png" width="600"/>
 </p>
+
 ---
 
 ## Struktur Repository
