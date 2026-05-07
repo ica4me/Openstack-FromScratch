@@ -1,0 +1,43 @@
+{
+  "exportedAt": "2026-05-07T03:33:04.230Z",
+  "source": "docmost",
+  "version": "0.80.0",
+  "pages": {
+    "AUTOMASI-OPENSTACK-FROM-SCRATCH.md": {
+      "pageId": "019dd2eb-0a56-7f9a-967b-f19253f9d61d",
+      "slugId": "2e3u9mqSAl",
+      "icon": "😸",
+      "position": "aLAdN",
+      "parentPath": null,
+      "createdAt": "2026-04-28T07:08:32.210Z",
+      "updatedAt": "2026-05-06T10:35:04.876Z"
+    },
+    "AUTOMASI-OPENSTACK-FROM-SCRATCH/Testing%20HA%20Masakari.md": {
+      "pageId": "019dfcd6-3b57-77ae-a1f0-0a1f0edb5f50",
+      "slugId": "GJzwrloib5",
+      "icon": null,
+      "position": "a14TX",
+      "parentPath": "AUTOMASI-OPENSTACK-FROM-SCRATCH.md",
+      "createdAt": "2026-05-06T10:29:51.572Z",
+      "updatedAt": "2026-05-06T11:24:55.567Z"
+    },
+    "AUTOMASI-OPENSTACK-FROM-SCRATCH/EndPoint.md": {
+      "pageId": "019dfc13-cffa-7b1f-b3ba-84e6c457b87f",
+      "slugId": "5VUy5Li0Tt",
+      "icon": null,
+      "position": "ZzARF",
+      "parentPath": "AUTOMASI-OPENSTACK-FROM-SCRATCH.md",
+      "createdAt": "2026-05-06T06:57:30.103Z",
+      "updatedAt": "2026-05-06T10:29:59.513Z"
+    },
+    "AUTOMASI-OPENSTACK-FROM-SCRATCH/Admin%20Operasional%20CLI.md": {
+      "pageId": "019dfc0e-2ad9-7b9e-bd1a-61df5d11cd49",
+      "slugId": "9SmWlEgQ8r",
+      "icon": null,
+      "position": "a0Axx",
+      "parentPath": "AUTOMASI-OPENSTACK-FROM-SCRATCH.md",
+      "createdAt": "2026-05-06T06:51:20.151Z",
+      "updatedAt": "2026-05-06T10:28:12.258Z"
+    }
+  }
+}
