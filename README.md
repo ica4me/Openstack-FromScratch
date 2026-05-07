@@ -371,3 +371,60 @@ Repo ini cocok sebagai baseline belajar dan lab teknis untuk memahami komponen O
     alt="Horizon Dahsboard"
   />
 </p>
+
+## Documentation & References
+
+### Project Documentation
+
+- [Full Step-by-Step Documentation](https://github.com/ica4me/Openstack-FromScratch/blob/main/Documentation/AUTOMASI-OPENSTACK-FROM-SCRATCH.md)
+- [Basic Admin Operasional CLI](https://github.com/ica4me/Openstack-FromScratch/blob/main/Documentation/AUTOMASI-OPENSTACK-FROM-SCRATCH/Admin%20Operasional%20CLI.md)
+- [Final Endpoint List](https://github.com/ica4me/Openstack-FromScratch/blob/main/Documentation/AUTOMASI-OPENSTACK-FROM-SCRATCH/EndPoint.md)
+- [Testing HA Masakari](https://github.com/ica4me/Openstack-FromScratch/blob/main/Documentation/AUTOMASI-OPENSTACK-FROM-SCRATCH/Testing%20HA%20Masakari.md)
+
+### OpenStack & Ubuntu References
+
+- [OpenStack 2024.1 Caracal Documentation](https://docs.openstack.org/2024.1/)
+- [OpenStack 2024.1 Installation Guides](https://docs.openstack.org/2024.1/install/)
+- [OpenStack Installation Guide - Ubuntu Packages](https://docs.openstack.org/install-guide/environment-packages-ubuntu.html)
+- [Ubuntu Cloud Archive](https://wiki.ubuntu.com/OpenStack/CloudArchive)
+- [Ubuntu Cloud Archive Caracal Version Tracker](https://openstack-ci-reports.ubuntu.com/reports/cloud-archive/caracal_versions.html)
+- [OpenStack Caracal Release Information](https://www.openstack.org/software/openstack-caracal/)
+
+### OpenStack Service References
+
+- [Keystone - OpenStack Identity Service](https://docs.openstack.org/keystone/latest/)
+- [Nova - OpenStack Compute Service](https://docs.openstack.org/nova/latest/)
+- [Neutron - OpenStack Networking](https://docs.openstack.org/neutron/latest/)
+- [Glance - OpenStack Image Service](https://docs.openstack.org/glance/latest/)
+- [Cinder - OpenStack Block Storage](https://docs.openstack.org/cinder/latest/)
+- [Placement API](https://docs.openstack.org/placement/latest/)
+- [Masakari - Instance High Availability](https://docs.openstack.org/masakari/latest/)
+- [Ceilometer - Telemetry Data Collection](https://docs.openstack.org/ceilometer/latest/)
+- [Aodh - Telemetry Alarming](https://docs.openstack.org/aodh/latest/)
+- [Gnocchi - Time Series Database for Metrics](https://gnocchi.osci.io/)
+
+### Networking & Storage References
+
+- [Neutron OVS Provider Networks](https://docs.openstack.org/neutron/latest/admin/deploy-ovs-provider.html)
+- [Neutron OVS Self-Service Networks](https://docs.openstack.org/neutron/latest/admin/deploy-ovs-selfservice.html)
+- [Ceph Block Devices and OpenStack](https://docs.ceph.com/en/reef/rbd/rbd-openstack/)
+- [Cinder with Ceph Backend](https://docs.openstack.org/cinder/latest/configuration/block-storage/drivers/ceph-rbd-volume-driver.html)
+
+### High Availability References
+
+- [OpenStack High Availability Guide](https://docs.openstack.org/ha-guide/)
+- [OpenStack HA Common Technologies](https://docs.openstack.org/ha-guide/intro-ha-common-tech.html)
+- [HAProxy Documentation](https://www.haproxy.com/documentation/)
+- [HAProxy Configuration Manual](https://www.haproxy.com/documentation/haproxy-configuration-manual/latest/)
+- [Keepalived User Guide](https://keepalived.readthedocs.io/)
+- [Keepalived VRRP Introduction](https://keepalived.readthedocs.io/en/latest/introduction.html)
+- [Pacemaker Documentation](https://clusterlabs.org/projects/pacemaker/doc/)
+- [Pacemaker GitHub Repository](https://github.com/ClusterLabs/pacemaker)
+
+### Operational References
+
+- [OpenStackClient Documentation](https://docs.openstack.org/python-openstackclient/latest/)
+- [OpenStack API Reference](https://docs.openstack.org/api-ref/)
+- [Nova Compute API Reference](https://docs.openstack.org/api-ref/compute/)
+- [Neutron Networking API Reference](https://docs.openstack.org/api-ref/network/)
+- [Cinder Block Storage API Reference](https://docs.openstack.org/api-ref/block-storage/)
