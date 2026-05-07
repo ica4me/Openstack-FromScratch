@@ -84,7 +84,10 @@ Kalau nama NIC di server berbeda, ubah di `inventories/lab-5node/hosts.yml` dan 
 | `cmp01`   | `compute-01`    | `172.16.2.221` | `172.16.1.221` | `ens20`      | Compute + Masakari monitor                          |
 | `cmp02`   | `compute-02`    | `172.16.2.222` | `172.16.1.222` | `ens20`      | Compute + Masakari monitor                          |
 
-## ![](files/019dd308-391f-7131-ac66-2dd4d8643f9e/image.png)
+<p align="center">
+ <img src="https://github.com/ica4me/Openstack-FromScratch/raw/main/Documentation/files/019dd308-391f-7131-ac66-2dd4d8643f9e/image.png" width="600"/>
+</p>
+---
 
 ## Struktur Repository
 
@@ -356,4 +359,6 @@ Repo ini cocok sebagai baseline belajar dan lab teknis untuk memahami komponen O
 
 ## Horizon Dahsboard
 
-![](files/019df241-5547-755d-911f-febd52fa26a7/image.png)
+<p align="center">
+ <img src="https://github.com/ica4me/Openstack-FromScratch/raw/main/Documentation/files/019df241-5547-755d-911f-febd52fa26a7/image.png" width="600"/>
+</p>
